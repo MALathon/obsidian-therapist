@@ -1,0 +1,9 @@
+{
+  "id": "obsidian-therapist",
+  "name": "Therapist",
+  "version": "0.1.0",
+  "minAppVersion": "1.0.0",
+  "description": "Your AI therapist that responds inline as you journal",
+  "author": "Mark",
+  "isDesktopOnly": false
+}
