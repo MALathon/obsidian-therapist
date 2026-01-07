@@ -102,16 +102,40 @@ export class LettaService {
   }
 
   /**
-   * Update provider API key on the server
+   * Create or update a provider with API key on the server
    */
   async updateProviderKey(provider: string, apiKey: string): Promise<void> {
     try {
-      await requestUrl({
-        url: `${this.baseUrl}/v1/providers/${provider}/`,
-        method: 'PUT',
+      // First check if provider exists
+      const existingProviders = await requestUrl({
+        url: `${this.baseUrl}/v1/providers/`,
         headers: this.getHeaders(),
-        body: JSON.stringify({ api_key: apiKey }),
       });
+
+      const providers = existingProviders.json as Array<{ id: string; name: string; provider_type: string }>;
+      const existing = providers.find(p => p.provider_type === provider);
+
+      if (existing) {
+        // Update existing provider
+        await requestUrl({
+          url: `${this.baseUrl}/v1/providers/${existing.id}/`,
+          method: 'PATCH',
+          headers: this.getHeaders(),
+          body: JSON.stringify({ api_key: apiKey }),
+        });
+      } else {
+        // Create new provider
+        await requestUrl({
+          url: `${this.baseUrl}/v1/providers/`,
+          method: 'POST',
+          headers: this.getHeaders(),
+          body: JSON.stringify({
+            name: provider,
+            provider_type: provider,
+            api_key: apiKey,
+          }),
+        });
+      }
     } catch (error) {
       console.warn(`Failed to update provider key:`, error);
     }
