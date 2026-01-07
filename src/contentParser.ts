@@ -17,18 +17,36 @@ export function getNewContent(fullContent: string): string {
     return fullContent.trim();
   }
 
-  // Find the end of the last response (next non-blockquote line after blank line)
-  const afterResponse = fullContent.substring(lastResponseIndex);
+  // Get everything after the therapist prefix
+  const afterPrefix = fullContent.substring(lastResponseIndex);
 
-  // Look for double newline followed by non-blockquote content
-  const match = afterResponse.match(/\n\n(?!>)(.+)/s);
+  // Split into lines and find where the blockquote ends
+  const lines = afterPrefix.split('\n');
+  let userContentStart = -1;
+  let inBlockquote = true;
 
-  if (!match) {
-    // Response is at the end or only blockquotes after, nothing new
-    return '';
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (inBlockquote) {
+      // Still in blockquote - look for non-blockquote, non-empty line
+      if (trimmed === '' || trimmed.startsWith('>')) {
+        continue; // Still part of blockquote or blank line
+      } else {
+        // Found user content
+        userContentStart = i;
+        break;
+      }
+    }
   }
 
-  return match[1].trim();
+  if (userContentStart === -1) {
+    return ''; // No user content after therapist response
+  }
+
+  // Join remaining lines as user content
+  return lines.slice(userContentStart).join('\n').trim();
 }
 
 /**
@@ -40,7 +58,14 @@ export function isTherapistResponse(content: string): boolean {
 
 /**
  * Format a therapist response as a blockquote
+ * Handles multi-line responses by blockquoting each line
  */
 export function formatResponse(response: string): string {
-  return `\n\n${THERAPIST_PREFIX} ${response}\n\n`;
+  const lines = response.split('\n');
+  const blockquoted = lines.map((line, i) => {
+    if (i === 0) return `${THERAPIST_PREFIX} ${line}`;
+    if (line.trim() === '') return '>'; // Empty blockquote line preserves paragraph breaks
+    return `> ${line}`;
+  }).join('\n');
+  return `\n\n${blockquoted}\n\n`;
 }
