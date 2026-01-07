@@ -239,14 +239,16 @@ export class TherapistSettingTab extends PluginSettingTab {
         .setButtonText('Test')
         .onClick(async () => {
           try {
-            const healthy = await this.plugin.lettaService.healthCheck();
-            if (healthy) {
-              new Notice('Connected to Letta server');
+            const url = `${this.plugin.settings.lettaUrl}/v1/health/`;
+            new Notice(`Testing ${url}...`);
+            const response = await fetch(url);
+            if (response.ok) {
+              new Notice('Connected to Letta server!');
             } else {
-              new Notice('Server responded but not healthy');
+              new Notice(`Server error: ${response.status} ${response.statusText}`);
             }
           } catch (error) {
-            new Notice('Cannot reach Letta server');
+            new Notice(`Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
           }
         }));
   }
