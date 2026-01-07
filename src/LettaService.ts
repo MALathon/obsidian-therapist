@@ -18,6 +18,12 @@ export class LettaService {
     this.apiKey = key;
   }
 
+  private providerKeys: Record<string, string> = {};
+
+  setProviderKey(provider: string, key: string) {
+    this.providerKeys[provider] = key;
+  }
+
   private getHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -29,16 +35,50 @@ export class LettaService {
   }
 
   /**
+   * List available models from the Letta server
+   */
+  async listModels(): Promise<Array<{ handle: string; name: string; provider: string }>> {
+    const response = await fetch(`${this.baseUrl}/v1/models/`, {
+      headers: this.getHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to fetch models');
+    }
+    const models = await response.json();
+    return models.map((m: { handle: string; name: string; provider_name: string }) => ({
+      handle: m.handle,
+      name: m.name,
+      provider: m.provider_name,
+    }));
+  }
+
+  /**
+   * Update provider API key on the server
+   */
+  async updateProviderKey(provider: string, apiKey: string): Promise<void> {
+    // Try to update via Letta's provider API
+    const response = await fetch(`${this.baseUrl}/v1/providers/${provider}`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ api_key: apiKey }),
+    });
+    if (!response.ok) {
+      const error = await response.text();
+      console.warn(`Failed to update provider key: ${error}`);
+    }
+  }
+
+  /**
    * Create a new therapist agent
    */
-  async createAgent(): Promise<string> {
+  async createAgent(model: string = 'ollama/llama3.2', embedding: string = 'ollama/nomic-embed-text'): Promise<string> {
     const response = await fetch(`${this.baseUrl}/v1/agents`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
         name: 'therapist',
-        model: 'ollama/llama3.2',
-        embedding: 'ollama/nomic-embed-text',
+        model: model,
+        embedding: embedding,
         enable_sleeptime: true,
         memory_blocks: [
           {

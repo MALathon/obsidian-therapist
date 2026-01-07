@@ -52,18 +52,13 @@ export default class TherapistPlugin extends Plugin {
       }
     });
 
-    // Initialize agent on first run if needed
-    if (!this.settings.agentId) {
-      await this.initializeAgent();
-    }
-
     console.log('Therapist plugin loaded');
   }
 
   async handleEditorChange(editor: Editor, view: MarkdownView) {
     if (this.isProcessing) return;
-    if (!this.settings.agentId) {
-      console.error('No agent configured');
+    if (!this.settings.activeAgentId) {
+      console.error('No agent configured - create one in settings');
       return;
     }
 
@@ -80,7 +75,7 @@ export default class TherapistPlugin extends Plugin {
 
     try {
       const response = await this.lettaService.sendMessage(
-        this.settings.agentId,
+        this.settings.activeAgentId,
         newContent
       );
 
@@ -97,18 +92,6 @@ export default class TherapistPlugin extends Plugin {
       console.error('Error getting therapist response:', error);
     } finally {
       this.isProcessing = false;
-    }
-  }
-
-  async initializeAgent() {
-    try {
-      console.log('Creating therapist agent...');
-      const agentId = await this.lettaService.createAgent();
-      this.settings.agentId = agentId;
-      await this.saveSettings();
-      console.log('Therapist agent created:', agentId);
-    } catch (error) {
-      console.error('Failed to create agent:', error);
     }
   }
 
