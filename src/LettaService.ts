@@ -3,13 +3,29 @@
  */
 export class LettaService {
   private baseUrl: string;
+  private apiKey: string;
 
-  constructor(baseUrl: string) {
+  constructor(baseUrl: string, apiKey: string = '') {
     this.baseUrl = baseUrl;
+    this.apiKey = apiKey;
   }
 
   setBaseUrl(url: string) {
     this.baseUrl = url;
+  }
+
+  setApiKey(key: string) {
+    this.apiKey = key;
+  }
+
+  private getHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (this.apiKey) {
+      headers['Authorization'] = `Bearer ${this.apiKey}`;
+    }
+    return headers;
   }
 
   /**
@@ -18,9 +34,7 @@ export class LettaService {
   async createAgent(): Promise<string> {
     const response = await fetch(`${this.baseUrl}/v1/agents`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: this.getHeaders(),
       body: JSON.stringify({
         name: 'therapist',
         model: 'ollama/llama3.2',
@@ -64,9 +78,7 @@ Be warm but direct. Don't just reflect - actually help me.`
   async sendMessage(agentId: string, content: string): Promise<string> {
     const response = await fetch(`${this.baseUrl}/v1/agents/${agentId}/messages`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: this.getHeaders(),
       body: JSON.stringify({
         messages: [
           {

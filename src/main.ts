@@ -11,7 +11,7 @@ export default class TherapistPlugin extends Plugin {
   async onload() {
     await this.loadSettings();
 
-    this.lettaService = new LettaService(this.settings.lettaUrl);
+    this.lettaService = new LettaService(this.settings.lettaUrl, this.settings.apiKey);
 
     // Add settings tab
     this.addSettingTab(new TherapistSettingTab(this.app, this));

@@ -3,6 +3,7 @@ import type TherapistPlugin from './main';
 
 export interface TherapistSettings {
   lettaUrl: string;
+  apiKey: string;
   agentId: string;
   enabled: boolean;
   debounceMs: number;
@@ -11,6 +12,7 @@ export interface TherapistSettings {
 
 export const DEFAULT_SETTINGS: TherapistSettings = {
   lettaUrl: 'http://localhost:8283',
+  apiKey: '',
   agentId: '',
   enabled: true,
   debounceMs: 3000,
@@ -52,6 +54,21 @@ export class TherapistSettingTab extends PluginSettingTab {
           this.plugin.lettaService.setBaseUrl(value);
           await this.plugin.saveSettings();
         }));
+
+    new Setting(containerEl)
+      .setName('API Key')
+      .setDesc('Letta server API key (sk-let-...)')
+      .addText(text => {
+        text.inputEl.type = 'password';
+        text
+          .setPlaceholder('sk-let-...')
+          .setValue(this.plugin.settings.apiKey)
+          .onChange(async (value) => {
+            this.plugin.settings.apiKey = value;
+            this.plugin.lettaService.setApiKey(value);
+            await this.plugin.saveSettings();
+          });
+      });
 
     new Setting(containerEl)
       .setName('Response Delay')
