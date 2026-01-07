@@ -199,9 +199,7 @@ export class LettaService {
   async healthCheck(): Promise<boolean> {
     try {
       const response = await fetch(`${this.baseUrl}/v1/health/`);
-      if (!response.ok) return false;
-      const data = await response.json();
-      return data.status === 'ok';
+      return response.ok;
     } catch {
       return false;
     }

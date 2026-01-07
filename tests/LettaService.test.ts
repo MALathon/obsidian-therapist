@@ -175,10 +175,7 @@ describe('LettaService', () => {
 
   describe('healthCheck', () => {
     it('returns true when server is healthy', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ status: 'ok' })
-      });
+      mockFetch.mockResolvedValueOnce({ ok: true });
 
       const result = await service.healthCheck();
 
