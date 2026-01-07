@@ -103,7 +103,7 @@ export class LettaService {
    */
   async updateProviderKey(provider: string, apiKey: string): Promise<void> {
     // Try to update via Letta's provider API
-    const response = await fetch(`${this.baseUrl}/v1/providers/${provider}`, {
+    const response = await fetch(`${this.baseUrl}/v1/providers/${provider}/`, {
       method: 'PUT',
       headers: this.getHeaders(),
       body: JSON.stringify({ api_key: apiKey }),
@@ -126,7 +126,7 @@ export class LettaService {
   ): Promise<string> {
     const persona = customPersona || ROLE_PERSONAS[role] || ROLE_PERSONAS.custom;
 
-    const response = await fetch(`${this.baseUrl}/v1/agents`, {
+    const response = await fetch(`${this.baseUrl}/v1/agents/`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -160,7 +160,7 @@ export class LettaService {
    * Send a message to the therapist agent and get a response
    */
   async sendMessage(agentId: string, content: string): Promise<string> {
-    const response = await fetch(`${this.baseUrl}/v1/agents/${agentId}/messages`, {
+    const response = await fetch(`${this.baseUrl}/v1/agents/${agentId}/messages/`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -198,8 +198,10 @@ export class LettaService {
    */
   async healthCheck(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/v1/health`);
-      return response.ok;
+      const response = await fetch(`${this.baseUrl}/v1/health/`);
+      if (!response.ok) return false;
+      const data = await response.json();
+      return data.status === 'ok';
     } catch {
       return false;
     }

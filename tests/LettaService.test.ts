@@ -37,7 +37,7 @@ describe('LettaService', () => {
       service.createAgent('therapist', 'therapist');
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://newurl:1234/v1/agents',
+        'http://newurl:1234/v1/agents/',
         expect.any(Object)
       );
     });
@@ -54,7 +54,7 @@ describe('LettaService', () => {
 
       expect(agentId).toBe('agent-123');
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8283/v1/agents',
+        'http://localhost:8283/v1/agents/',
         expect.objectContaining({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -122,7 +122,7 @@ describe('LettaService', () => {
 
       expect(response).toBe('How are you feeling?');
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8283/v1/agents/agent-123/messages',
+        'http://localhost:8283/v1/agents/agent-123/messages/',
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining('I had a bad day')
@@ -175,12 +175,15 @@ describe('LettaService', () => {
 
   describe('healthCheck', () => {
     it('returns true when server is healthy', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ status: 'ok' })
+      });
 
       const result = await service.healthCheck();
 
       expect(result).toBe(true);
-      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8283/v1/health');
+      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8283/v1/health/');
     });
 
     it('returns false when server returns error', async () => {
