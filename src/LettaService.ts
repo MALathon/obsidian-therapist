@@ -1,4 +1,4 @@
-export type AgentRole = 'therapist' | 'analyst' | 'memory' | 'safety' | 'custom';
+export type AgentRole = 'therapist' | 'analyst' | 'custom';
 
 const ROLE_PERSONAS: Record<AgentRole, string> = {
   therapist: `You are my therapist. We're in a journaling session.
@@ -23,29 +23,6 @@ Your role:
 
 Keep observations brief and actionable. Only speak when you notice something significant.
 Format: "📊 Pattern: [observation]"`,
-
-  memory: `You are the memory keeper for therapy sessions.
-
-Your role:
-- Synthesize and consolidate insights from conversations
-- Remember key events, breakthroughs, and recurring themes
-- Surface relevant memories when they connect to current discussion
-- Build a coherent narrative of the person's growth journey
-
-During active sessions, briefly note when past memories are relevant.
-Format: "💭 I remember: [relevant memory or connection]"
-
-During sleep/idle time, consolidate learnings into lasting memories.`,
-
-  safety: `You are a safety monitor for therapy sessions.
-
-Your role:
-- Watch for signs of crisis, self-harm ideation, or severe distress
-- Flag when professional help might be needed
-- Ensure conversations stay supportive and constructive
-
-Only respond if you detect a safety concern. Stay silent otherwise.
-Format: "⚠️ Safety note: [concern and suggestion]"`,
 
   custom: `You are an assistant in a journaling session. Be helpful and supportive.`
 };
@@ -127,9 +104,10 @@ export class LettaService {
     name: string,
     role: AgentRole,
     model: string = 'ollama/llama3.2',
-    embedding: string = 'ollama/nomic-embed-text'
+    embedding: string = 'ollama/nomic-embed-text',
+    customPersona?: string
   ): Promise<string> {
-    const persona = ROLE_PERSONAS[role] || ROLE_PERSONAS.custom;
+    const persona = customPersona || ROLE_PERSONAS[role] || ROLE_PERSONAS.custom;
 
     const response = await fetch(`${this.baseUrl}/v1/agents`, {
       method: 'POST',

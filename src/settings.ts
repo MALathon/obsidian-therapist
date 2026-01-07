@@ -7,6 +7,7 @@ export interface AgentConfig {
   model: string;
   name: string;
   role: AgentRole;
+  customPersona?: string;  // Override default role persona
   enabled: boolean;  // Whether this agent participates in responses
   order: number;     // Order in the response chain (lower = first)
 }
@@ -218,11 +219,18 @@ export class TherapistSettingTab extends PluginSettingTab {
       .addDropdown(dropdown => dropdown
         .addOption('therapist', 'Therapist - primary responder')
         .addOption('analyst', 'Analyst - pattern recognition')
-        .addOption('memory', 'Memory - recalls past sessions')
-        .addOption('safety', 'Safety - monitors for concerns')
         .addOption('custom', 'Custom')
         .setValue(selectedRole)
-        .onChange((value: AgentRole) => { selectedRole = value; }));
+        .onChange((value: AgentRole) => { selectedRole = value; this.display(); }));
+
+    let customPersona = '';
+    new Setting(containerEl)
+      .setName('Persona')
+      .setDesc('Customize how this agent behaves (optional - leave blank for default)')
+      .addTextArea(text => text
+        .setPlaceholder('You are my therapist...')
+        .setValue(customPersona)
+        .onChange(value => { customPersona = value; }));
 
     new Setting(containerEl)
       .setName('Model')
@@ -242,13 +250,16 @@ export class TherapistSettingTab extends PluginSettingTab {
             const agentId = await this.plugin.lettaService.createAgent(
               agentName || selectedRole,
               selectedRole,
-              selectedModel
+              selectedModel,
+              undefined,  // embedding (use default)
+              customPersona || undefined
             );
             const newAgent: AgentConfig = {
               id: agentId,
               model: selectedModel,
               name: agentName || selectedRole,
               role: selectedRole,
+              customPersona: customPersona || undefined,
               enabled: true,
               order: this.plugin.settings.agents.length,
             };
