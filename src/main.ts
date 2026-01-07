@@ -1,11 +1,11 @@
 import { Plugin, MarkdownView, Editor, debounce } from 'obsidian';
 import { TherapistSettingTab, TherapistSettings, DEFAULT_SETTINGS } from './settings';
 import { LettaService } from './LettaService';
+import { getNewContent, isTherapistResponse, formatResponse } from './contentParser';
 
 export default class TherapistPlugin extends Plugin {
   settings: TherapistSettings;
   lettaService: LettaService;
-  private lastProcessedContent: string = '';
   private isProcessing: boolean = false;
 
   async onload() {
@@ -70,11 +70,11 @@ export default class TherapistPlugin extends Plugin {
     const content = editor.getValue();
 
     // Get new content since last therapist response
-    const newContent = this.getNewContent(content);
-    if (!newContent.trim()) return;
+    const newContent = getNewContent(content);
+    if (!newContent) return;
 
     // Don't respond to therapist responses
-    if (newContent.trim().startsWith('> **Therapist:**')) return;
+    if (isTherapistResponse(newContent)) return;
 
     this.isProcessing = true;
 
@@ -91,38 +91,13 @@ export default class TherapistPlugin extends Plugin {
 
         // Move to end of current line and insert response
         editor.setCursor({ line, ch: editor.getLine(line).length });
-        editor.replaceSelection(`\n\n> **Therapist:** ${response}\n\n`);
-
-        // Update last processed content
-        this.lastProcessedContent = editor.getValue();
+        editor.replaceSelection(formatResponse(response));
       }
     } catch (error) {
       console.error('Error getting therapist response:', error);
     } finally {
       this.isProcessing = false;
     }
-  }
-
-  getNewContent(fullContent: string): string {
-    // Find the last therapist response
-    const lastResponseIndex = fullContent.lastIndexOf('> **Therapist:**');
-
-    if (lastResponseIndex === -1) {
-      // No previous response, return all content
-      return fullContent;
-    }
-
-    // Find the end of the last response (next blank line after the blockquote)
-    const afterResponse = fullContent.substring(lastResponseIndex);
-    const endOfResponse = afterResponse.search(/\n\n(?!>)/);
-
-    if (endOfResponse === -1) {
-      // Response is at the end, nothing new
-      return '';
-    }
-
-    // Return content after the last response
-    return fullContent.substring(lastResponseIndex + endOfResponse).trim();
   }
 
   async initializeAgent() {
