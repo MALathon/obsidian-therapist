@@ -151,35 +151,34 @@ export class TherapistSettingTab extends PluginSettingTab {
 
     // Model selector
     let selectedModel = 'letta/letta-free';
-    const modelSetting = new Setting(containerEl)
+    let modelDropdown: any = null;
+
+    new Setting(containerEl)
       .setName('Model')
       .setDesc('Click refresh to load available models')
       .addDropdown(dropdown => {
+        modelDropdown = dropdown;
         dropdown.addOption('letta/letta-free', 'letta/letta-free (default)');
         dropdown.setValue(selectedModel);
         dropdown.onChange(value => { selectedModel = value; });
-
-        // Store reference to update later
-        (modelSetting as any).dropdown = dropdown;
       })
       .addButton(button => button
         .setButtonText('Refresh')
         .onClick(async () => {
           try {
             const models = await this.plugin.lettaService.listModels();
-            const dropdown = (modelSetting as any).dropdown;
 
             // Clear and repopulate
-            dropdown.selectEl.empty();
-            dropdown.addOption('letta/letta-free', 'letta/letta-free (default)');
+            modelDropdown.selectEl.empty();
+            modelDropdown.addOption('letta/letta-free', 'letta/letta-free (default)');
 
             for (const model of models) {
               if (model.handle !== 'letta/letta-free') {
-                dropdown.addOption(model.handle, model.handle);
+                modelDropdown.addOption(model.handle, model.handle);
               }
             }
 
-            dropdown.setValue(selectedModel);
+            modelDropdown.setValue(selectedModel);
             new Notice(`Found ${models.length} models`);
           } catch (error) {
             new Notice('Failed to fetch models - check server connection');
