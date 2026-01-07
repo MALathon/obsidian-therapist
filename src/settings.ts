@@ -149,6 +149,43 @@ export class TherapistSettingTab extends PluginSettingTab {
 
     containerEl.createEl('h3', { text: 'Setup' });
 
+    // Model selector
+    let selectedModel = 'letta/letta-free';
+    const modelSetting = new Setting(containerEl)
+      .setName('Model')
+      .setDesc('Click refresh to load available models')
+      .addDropdown(dropdown => {
+        dropdown.addOption('letta/letta-free', 'letta/letta-free (default)');
+        dropdown.setValue(selectedModel);
+        dropdown.onChange(value => { selectedModel = value; });
+
+        // Store reference to update later
+        (modelSetting as any).dropdown = dropdown;
+      })
+      .addButton(button => button
+        .setButtonText('Refresh')
+        .onClick(async () => {
+          try {
+            const models = await this.plugin.lettaService.listModels();
+            const dropdown = (modelSetting as any).dropdown;
+
+            // Clear and repopulate
+            dropdown.selectEl.empty();
+            dropdown.addOption('letta/letta-free', 'letta/letta-free (default)');
+
+            for (const model of models) {
+              if (model.handle !== 'letta/letta-free') {
+                dropdown.addOption(model.handle, model.handle);
+              }
+            }
+
+            dropdown.setValue(selectedModel);
+            new Notice(`Found ${models.length} models`);
+          } catch (error) {
+            new Notice('Failed to fetch models - check server connection');
+          }
+        }));
+
     if (hasAgent) {
       new Setting(containerEl)
         .setName('Agent')
@@ -171,17 +208,9 @@ export class TherapistSettingTab extends PluginSettingTab {
           .setCta()
           .onClick(async () => {
             try {
-              // Pick model based on available API keys
-              let model = 'ollama/llama3.2';  // default fallback
-              let embedding = 'ollama/nomic-embed-text';
-
-              if (this.plugin.settings.anthropicApiKey) {
-                model = 'anthropic/claude-sonnet-4-20250514';
-                embedding = 'openai/text-embedding-3-small';
-              } else if (this.plugin.settings.openaiApiKey) {
-                model = 'openai/gpt-4o';
-                embedding = 'openai/text-embedding-3-small';
-              }
+              // Use selected model, default embedding to letta-free
+              const model = selectedModel;
+              const embedding = 'letta/letta-free';
 
               new Notice(`Creating agent with ${model}...`);
 
