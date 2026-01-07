@@ -3,6 +3,7 @@
  */
 
 export const THERAPIST_PREFIX = '> **Therapist:**';
+export const JOURNAL_HEADERS = ['# Journal', '## Journal', '### Journal'];
 
 /**
  * Extract new content since the last therapist response
@@ -68,4 +69,75 @@ export function formatResponse(response: string): string {
     return `> ${line}`;
   }).join('\n');
   return `\n\n${blockquoted}\n\n`;
+}
+
+/**
+ * Extract content under a Journal header
+ * Returns null if no journal section exists
+ */
+export function getJournalContent(fullContent: string): string | null {
+  // Find any journal header
+  let journalStart = -1;
+  let headerLevel = 0;
+
+  for (const header of JOURNAL_HEADERS) {
+    const idx = fullContent.indexOf(header);
+    if (idx !== -1 && (journalStart === -1 || idx < journalStart)) {
+      journalStart = idx;
+      headerLevel = header.split(' ')[0].length; // Count #'s
+    }
+  }
+
+  if (journalStart === -1) {
+    return null; // No journal section
+  }
+
+  // Find the end - next header of same or higher level, or end of file
+  const afterHeader = fullContent.substring(journalStart);
+  const lines = afterHeader.split('\n');
+  let endIndex = lines.length;
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    // Check if this is a header of same or higher level
+    const headerMatch = line.match(/^(#{1,6})\s/);
+    if (headerMatch && headerMatch[1].length <= headerLevel) {
+      endIndex = i;
+      break;
+    }
+  }
+
+  return lines.slice(1, endIndex).join('\n').trim();
+}
+
+/**
+ * Check if content contains engagement cues suggesting user wants a response
+ */
+export function hasEngagementCue(content: string): boolean {
+  const lowerContent = content.toLowerCase();
+
+  // Direct questions
+  if (content.includes('?')) return true;
+
+  // Engagement phrases
+  const cues = [
+    'you know',
+    'right?',
+    'what do you think',
+    'any thoughts',
+    'help me',
+    'i need',
+    'should i',
+    'could i',
+    'what should',
+    'what would',
+    'advice',
+    'suggest',
+    'opinion',
+    'perspective',
+    'thoughts?',
+    'ideas?',
+  ];
+
+  return cues.some(cue => lowerContent.includes(cue));
 }

@@ -1,7 +1,7 @@
 import { Plugin, MarkdownView, Editor, debounce, Notice } from 'obsidian';
 import { TherapistSettingTab, TherapistSettings, DEFAULT_SETTINGS } from './settings';
 import { LettaService } from './LettaService';
-import { getNewContent, isTherapistResponse, formatResponse } from './contentParser';
+import { getNewContent, isTherapistResponse, formatResponse, getJournalContent, hasEngagementCue } from './contentParser';
 
 export default class TherapistPlugin extends Plugin {
   settings: TherapistSettings;
@@ -37,7 +37,7 @@ export default class TherapistPlugin extends Plugin {
       id: 'trigger-therapist',
       name: 'Ask therapist to respond',
       editorCallback: (editor: Editor, view: MarkdownView) => {
-        this.handleEditorChange(editor, view);
+        this.handleEditorChange(editor, view, true); // Force respond
       }
     });
 
@@ -56,28 +56,47 @@ export default class TherapistPlugin extends Plugin {
     console.log('Therapist plugin loaded');
   }
 
-  async handleEditorChange(editor: Editor, view: MarkdownView) {
+  async handleEditorChange(editor: Editor, view: MarkdownView, forceRespond: boolean = false) {
     if (this.isProcessing) return;
     if (!this.settings.agentId) {
       console.error('No agent configured - create one in settings');
       return;
     }
 
-    const content = editor.getValue();
+    const fullContent = editor.getValue();
 
-    // Get new content since last therapist response
-    const newContent = getNewContent(content);
+    // Only process notes with a Journal section
+    const journalContent = getJournalContent(fullContent);
+    if (!journalContent) {
+      return; // No journal section, skip
+    }
+
+    // Get new content since last therapist response (within journal section)
+    const newContent = getNewContent(journalContent);
     if (!newContent) return;
 
     // Don't respond to therapist responses
     if (isTherapistResponse(newContent)) return;
 
+    // Check for engagement cues - if none and not forced, let agent decide
+    const hasEngagement = hasEngagementCue(newContent);
+
     this.isProcessing = true;
 
     try {
-      const response = await this.lettaService.sendMessage(this.settings.agentId, newContent);
+      // Tell agent whether user is explicitly engaging
+      const contextPrefix = hasEngagement || forceRespond
+        ? '[User is asking for your input]\n\n'
+        : '[User is journaling - respond only if you have something valuable to add]\n\n';
 
-      if (response && response.trim()) {
+      const response = await this.lettaService.sendMessage(
+        this.settings.agentId,
+        contextPrefix + newContent
+      );
+
+      // Only insert if agent actually responded with content (not just listening)
+      const trimmedResponse = response?.trim() || '';
+      if (trimmedResponse && trimmedResponse !== '[listening]') {
         const cursor = editor.getCursor();
         const line = cursor.line;
         editor.setCursor({ line, ch: editor.getLine(line).length });
