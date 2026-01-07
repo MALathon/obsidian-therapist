@@ -1,10 +1,14 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import type TherapistPlugin from './main';
+import type { AgentRole } from './LettaService';
 
 export interface AgentConfig {
   id: string;
   model: string;
   name: string;
+  role: AgentRole;
+  enabled: boolean;  // Whether this agent participates in responses
+  order: number;     // Order in the response chain (lower = first)
 }
 
 export interface TherapistSettings {
@@ -13,7 +17,8 @@ export interface TherapistSettings {
   openaiApiKey: string;
   anthropicApiKey: string;
   agents: AgentConfig[];
-  activeAgentId: string;
+  multiAgentMode: 'single' | 'sequential' | 'parallel';
+  primaryAgentId: string;  // Fallback if only one agent needed
   enabled: boolean;
   debounceMs: number;
 }
@@ -24,7 +29,8 @@ export const DEFAULT_SETTINGS: TherapistSettings = {
   openaiApiKey: '',
   anthropicApiKey: '',
   agents: [],
-  activeAgentId: '',
+  multiAgentMode: 'single',
+  primaryAgentId: '',
   enabled: true,
   debounceMs: 3000,
 };
@@ -124,40 +130,71 @@ export class TherapistSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    containerEl.createEl('h3', { text: 'Agents' });
+    containerEl.createEl('h3', { text: 'Multi-Agent Configuration' });
 
-    // Active agent selector
-    if (this.plugin.settings.agents.length > 0) {
+    // Multi-agent mode selector
+    new Setting(containerEl)
+      .setName('Agent Mode')
+      .setDesc('How agents work together')
+      .addDropdown(dropdown => dropdown
+        .addOption('single', 'Single Agent')
+        .addOption('sequential', 'Sequential (agents respond in order)')
+        .addOption('parallel', 'Parallel (all agents respond)')
+        .setValue(this.plugin.settings.multiAgentMode)
+        .onChange(async (value: 'single' | 'sequential' | 'parallel') => {
+          this.plugin.settings.multiAgentMode = value;
+          await this.plugin.saveSettings();
+          this.display();
+        }));
+
+    // Primary agent selector (for single mode)
+    if (this.plugin.settings.multiAgentMode === 'single' && this.plugin.settings.agents.length > 0) {
       new Setting(containerEl)
-        .setName('Active Agent')
-        .setDesc('Select which agent to use')
+        .setName('Primary Agent')
+        .setDesc('Which agent responds to your journal')
         .addDropdown(dropdown => {
           for (const agent of this.plugin.settings.agents) {
-            dropdown.addOption(agent.id, `${agent.name} (${agent.model})`);
+            dropdown.addOption(agent.id, `${agent.name} (${agent.role})`);
           }
-          dropdown.setValue(this.plugin.settings.activeAgentId);
+          dropdown.setValue(this.plugin.settings.primaryAgentId);
           dropdown.onChange(async (value) => {
-            this.plugin.settings.activeAgentId = value;
+            this.plugin.settings.primaryAgentId = value;
             await this.plugin.saveSettings();
           });
         });
+    }
 
-      // List existing agents with delete buttons
+    // List existing agents
+    if (this.plugin.settings.agents.length > 0) {
+      containerEl.createEl('h4', { text: 'Your Agents' });
+
       for (const agent of this.plugin.settings.agents) {
-        new Setting(containerEl)
-          .setName(agent.name)
-          .setDesc(`Model: ${agent.model} | ID: ${agent.id}`)
-          .addButton(button => button
-            .setButtonText('Delete')
-            .setWarning()
-            .onClick(async () => {
-              this.plugin.settings.agents = this.plugin.settings.agents.filter(a => a.id !== agent.id);
-              if (this.plugin.settings.activeAgentId === agent.id) {
-                this.plugin.settings.activeAgentId = this.plugin.settings.agents[0]?.id || '';
-              }
+        const setting = new Setting(containerEl)
+          .setName(`${agent.name} (${agent.role})`)
+          .setDesc(`Model: ${agent.model}`);
+
+        // Enable/disable toggle for multi-agent modes
+        if (this.plugin.settings.multiAgentMode !== 'single') {
+          setting.addToggle(toggle => toggle
+            .setValue(agent.enabled)
+            .setTooltip('Enable this agent')
+            .onChange(async (value) => {
+              agent.enabled = value;
               await this.plugin.saveSettings();
-              this.display();
             }));
+        }
+
+        setting.addButton(button => button
+          .setButtonText('Delete')
+          .setWarning()
+          .onClick(async () => {
+            this.plugin.settings.agents = this.plugin.settings.agents.filter(a => a.id !== agent.id);
+            if (this.plugin.settings.primaryAgentId === agent.id) {
+              this.plugin.settings.primaryAgentId = this.plugin.settings.agents[0]?.id || '';
+            }
+            await this.plugin.saveSettings();
+            this.display();
+          }));
       }
     }
 
@@ -166,6 +203,7 @@ export class TherapistSettingTab extends PluginSettingTab {
 
     let selectedModel = 'ollama/llama3.2';
     let agentName = 'therapist';
+    let selectedRole: AgentRole = 'therapist';
 
     new Setting(containerEl)
       .setName('Agent Name')
@@ -175,8 +213,20 @@ export class TherapistSettingTab extends PluginSettingTab {
         .onChange(value => { agentName = value; }));
 
     new Setting(containerEl)
+      .setName('Role')
+      .setDesc('Agent\'s specialized function')
+      .addDropdown(dropdown => dropdown
+        .addOption('therapist', 'Therapist - primary responder')
+        .addOption('analyst', 'Analyst - pattern recognition')
+        .addOption('memory', 'Memory - recalls past sessions')
+        .addOption('safety', 'Safety - monitors for concerns')
+        .addOption('custom', 'Custom')
+        .setValue(selectedRole)
+        .onChange((value: AgentRole) => { selectedRole = value; }));
+
+    new Setting(containerEl)
       .setName('Model')
-      .setDesc('Select model for the agent')
+      .setDesc('LLM to power this agent')
       .addText(text => text
         .setPlaceholder('ollama/llama3.2 or openai/gpt-4o')
         .setValue(selectedModel)
@@ -189,14 +239,23 @@ export class TherapistSettingTab extends PluginSettingTab {
         .setCta()
         .onClick(async () => {
           try {
-            const agentId = await this.plugin.lettaService.createAgent(selectedModel);
+            const agentId = await this.plugin.lettaService.createAgent(
+              agentName || selectedRole,
+              selectedRole,
+              selectedModel
+            );
             const newAgent: AgentConfig = {
               id: agentId,
               model: selectedModel,
-              name: agentName || 'therapist',
+              name: agentName || selectedRole,
+              role: selectedRole,
+              enabled: true,
+              order: this.plugin.settings.agents.length,
             };
             this.plugin.settings.agents.push(newAgent);
-            this.plugin.settings.activeAgentId = agentId;
+            if (!this.plugin.settings.primaryAgentId) {
+              this.plugin.settings.primaryAgentId = agentId;
+            }
             await this.plugin.saveSettings();
             this.display();
           } catch (error) {
@@ -215,7 +274,6 @@ export class TherapistSettingTab extends PluginSettingTab {
             const models = await this.plugin.lettaService.listModels();
             const modelList = models.map(m => m.handle).join('\n');
             console.log('Available models:\n' + modelList);
-            // Could show in a modal, for now just log
           } catch (error) {
             console.error('Failed to fetch models:', error);
           }

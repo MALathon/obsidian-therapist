@@ -34,7 +34,7 @@ describe('LettaService', () => {
         json: () => Promise.resolve({ id: 'test' })
       });
 
-      service.createAgent();
+      service.createAgent('therapist', 'therapist');
 
       expect(mockFetch).toHaveBeenCalledWith(
         'http://newurl:1234/v1/agents',
@@ -50,7 +50,7 @@ describe('LettaService', () => {
         json: () => Promise.resolve({ id: 'agent-123' })
       });
 
-      const agentId = await service.createAgent();
+      const agentId = await service.createAgent('therapist', 'therapist');
 
       expect(agentId).toBe('agent-123');
       expect(mockFetch).toHaveBeenCalledWith(
@@ -69,7 +69,7 @@ describe('LettaService', () => {
         json: () => Promise.resolve({ id: 'agent-123' })
       });
 
-      await service.createAgent();
+      await service.createAgent('therapist', 'therapist');
 
       const call = mockFetch.mock.calls[0];
       const body = JSON.parse(call[1].body);
@@ -81,13 +81,28 @@ describe('LettaService', () => {
       expect(body.memory_blocks[1].label).toBe('human');
     });
 
+    it('uses role-specific persona', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'agent-456' })
+      });
+
+      await service.createAgent('pattern-watcher', 'analyst');
+
+      const call = mockFetch.mock.calls[0];
+      const body = JSON.parse(call[1].body);
+
+      expect(body.name).toBe('pattern-watcher');
+      expect(body.memory_blocks[0].value).toContain('pattern analyst');
+    });
+
     it('throws error on failed request', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         text: () => Promise.resolve('Server error')
       });
 
-      await expect(service.createAgent()).rejects.toThrow('Failed to create agent: Server error');
+      await expect(service.createAgent('test', 'therapist')).rejects.toThrow('Failed to create agent: Server error');
     });
   });
 

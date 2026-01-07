@@ -57,8 +57,10 @@ export default class TherapistPlugin extends Plugin {
 
   async handleEditorChange(editor: Editor, view: MarkdownView) {
     if (this.isProcessing) return;
-    if (!this.settings.activeAgentId) {
-      console.error('No agent configured - create one in settings');
+
+    const enabledAgents = this.getEnabledAgents();
+    if (enabledAgents.length === 0) {
+      console.error('No agents configured - create one in settings');
       return;
     }
 
@@ -74,25 +76,83 @@ export default class TherapistPlugin extends Plugin {
     this.isProcessing = true;
 
     try {
-      const response = await this.lettaService.sendMessage(
-        this.settings.activeAgentId,
-        newContent
-      );
+      const responses = await this.getAgentResponses(enabledAgents, newContent);
 
-      if (response) {
-        // Insert response at cursor position
+      if (responses.length > 0) {
         const cursor = editor.getCursor();
         const line = cursor.line;
-
-        // Move to end of current line and insert response
         editor.setCursor({ line, ch: editor.getLine(line).length });
-        editor.replaceSelection(formatResponse(response));
+
+        // Combine all responses
+        const combinedResponse = responses
+          .filter(r => r.content.trim())
+          .map(r => r.content)
+          .join('\n\n');
+
+        if (combinedResponse) {
+          editor.replaceSelection(formatResponse(combinedResponse));
+        }
       }
     } catch (error) {
       console.error('Error getting therapist response:', error);
     } finally {
       this.isProcessing = false;
     }
+  }
+
+  private getEnabledAgents() {
+    const { agents, multiAgentMode, primaryAgentId } = this.settings;
+
+    if (multiAgentMode === 'single') {
+      const primary = agents.find(a => a.id === primaryAgentId);
+      return primary ? [primary] : agents.slice(0, 1);
+    }
+
+    // For sequential/parallel, return enabled agents sorted by order
+    return agents
+      .filter(a => a.enabled)
+      .sort((a, b) => a.order - b.order);
+  }
+
+  private async getAgentResponses(
+    agents: typeof this.settings.agents,
+    content: string
+  ): Promise<Array<{ agentId: string; name: string; content: string }>> {
+    const { multiAgentMode } = this.settings;
+
+    if (multiAgentMode === 'parallel') {
+      // Query all agents simultaneously
+      const promises = agents.map(async (agent) => {
+        try {
+          const response = await this.lettaService.sendMessage(agent.id, content);
+          return { agentId: agent.id, name: agent.name, content: response };
+        } catch (error) {
+          console.error(`Agent ${agent.name} failed:`, error);
+          return { agentId: agent.id, name: agent.name, content: '' };
+        }
+      });
+      return Promise.all(promises);
+    }
+
+    // Sequential: each agent sees the content + previous responses
+    const responses: Array<{ agentId: string; name: string; content: string }> = [];
+    let accumulatedContext = content;
+
+    for (const agent of agents) {
+      try {
+        const response = await this.lettaService.sendMessage(agent.id, accumulatedContext);
+        responses.push({ agentId: agent.id, name: agent.name, content: response });
+
+        // Add this response to context for next agent
+        if (response.trim()) {
+          accumulatedContext += `\n\n[${agent.name}]: ${response}`;
+        }
+      } catch (error) {
+        console.error(`Agent ${agent.name} failed:`, error);
+      }
+    }
+
+    return responses;
   }
 
   onunload() {
