@@ -1,3 +1,5 @@
+import { requestUrl } from 'obsidian';
+
 export type AgentRole = 'therapist' | 'analyst' | 'custom';
 
 const ROLE_PERSONAS: Record<AgentRole, string> = {
@@ -84,13 +86,14 @@ export class LettaService {
    * List available models from the Letta server
    */
   async listModels(): Promise<Array<{ handle: string; name: string; provider: string }>> {
-    const response = await fetch(`${this.baseUrl}/v1/models/`, {
+    const response = await requestUrl({
+      url: `${this.baseUrl}/v1/models/`,
       headers: this.getHeaders(),
     });
-    if (!response.ok) {
+    if (response.status !== 200) {
       throw new Error('Failed to fetch models');
     }
-    const models = await response.json();
+    const models = response.json;
     return models.map((m: { handle: string; name: string; provider_name: string }) => ({
       handle: m.handle,
       name: m.name,
@@ -102,15 +105,15 @@ export class LettaService {
    * Update provider API key on the server
    */
   async updateProviderKey(provider: string, apiKey: string): Promise<void> {
-    // Try to update via Letta's provider API
-    const response = await fetch(`${this.baseUrl}/v1/providers/${provider}/`, {
-      method: 'PUT',
-      headers: this.getHeaders(),
-      body: JSON.stringify({ api_key: apiKey }),
-    });
-    if (!response.ok) {
-      const error = await response.text();
-      console.warn(`Failed to update provider key: ${error}`);
+    try {
+      await requestUrl({
+        url: `${this.baseUrl}/v1/providers/${provider}/`,
+        method: 'PUT',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ api_key: apiKey }),
+      });
+    } catch (error) {
+      console.warn(`Failed to update provider key:`, error);
     }
   }
 
@@ -126,7 +129,8 @@ export class LettaService {
   ): Promise<string> {
     const persona = customPersona || ROLE_PERSONAS[role] || ROLE_PERSONAS.custom;
 
-    const response = await fetch(`${this.baseUrl}/v1/agents/`, {
+    const response = await requestUrl({
+      url: `${this.baseUrl}/v1/agents/`,
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -147,20 +151,19 @@ export class LettaService {
       })
     });
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to create agent: ${error}`);
+    if (response.status !== 200) {
+      throw new Error(`Failed to create agent: ${response.text}`);
     }
 
-    const data = await response.json();
-    return data.id;
+    return response.json.id;
   }
 
   /**
    * Send a message to the therapist agent and get a response
    */
   async sendMessage(agentId: string, content: string): Promise<string> {
-    const response = await fetch(`${this.baseUrl}/v1/agents/${agentId}/messages/`, {
+    const response = await requestUrl({
+      url: `${this.baseUrl}/v1/agents/${agentId}/messages/`,
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -173,12 +176,11 @@ export class LettaService {
       })
     });
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to send message: ${error}`);
+    if (response.status !== 200) {
+      throw new Error(`Failed to send message: ${response.text}`);
     }
 
-    const data = await response.json();
+    const data = response.json;
 
     // Extract the assistant's response from the messages
     // Letta returns multiple message types, we want the assistant_message
@@ -198,8 +200,10 @@ export class LettaService {
    */
   async healthCheck(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/v1/health/`);
-      return response.ok;
+      const response = await requestUrl({
+        url: `${this.baseUrl}/v1/health/`,
+      });
+      return response.status === 200;
     } catch {
       return false;
     }

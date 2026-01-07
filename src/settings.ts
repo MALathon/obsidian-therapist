@@ -1,4 +1,4 @@
-import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
+import { App, Notice, PluginSettingTab, Setting, requestUrl } from 'obsidian';
 import type TherapistPlugin from './main';
 
 export interface TherapistSettings {
@@ -241,11 +241,11 @@ export class TherapistSettingTab extends PluginSettingTab {
           try {
             const url = `${this.plugin.settings.lettaUrl}/v1/health/`;
             new Notice(`Testing ${url}...`);
-            const response = await fetch(url);
-            if (response.ok) {
+            const response = await requestUrl({ url });
+            if (response.status === 200) {
               new Notice('Connected to Letta server!');
             } else {
-              new Notice(`Server error: ${response.status} ${response.statusText}`);
+              new Notice(`Server error: ${response.status}`);
             }
           } catch (error) {
             new Notice(`Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
