@@ -93,7 +93,7 @@ describe('LettaService', () => {
       const body = JSON.parse(call[1].body);
 
       expect(body.name).toBe('pattern-watcher');
-      expect(body.memory_blocks[0].value).toContain('pattern analyst');
+      expect(body.memory_blocks[0].value).toContain('observe patterns');
     });
 
     it('throws error on failed request', async () => {
