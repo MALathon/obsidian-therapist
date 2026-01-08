@@ -109,12 +109,13 @@ export class LettaService {
 
   /**
    * Create or update a provider with API key on the server
+   * Note: Letta requires trailing slashes on provider endpoints
    */
   async updateProviderKey(provider: string, apiKey: string): Promise<void> {
     try {
-      // First check if provider exists
+      // First check if provider exists (need trailing slash for Letta)
       const existingProviders = await requestUrl({
-        url: `${this.baseUrl}/v1/providers`,
+        url: `${this.baseUrl}/v1/providers/`,
         headers: this.getHeaders(),
       });
 
@@ -129,11 +130,12 @@ export class LettaService {
           headers: this.getHeaders(),
           body: JSON.stringify({ api_key: apiKey }),
         });
+        console.log(`Updated ${provider} provider`);
       } else {
         // Create new provider
         try {
           await requestUrl({
-            url: `${this.baseUrl}/v1/providers`,
+            url: `${this.baseUrl}/v1/providers/`,
             method: 'POST',
             headers: this.getHeaders(),
             body: JSON.stringify({
@@ -142,14 +144,17 @@ export class LettaService {
               api_key: apiKey,
             }),
           });
+          console.log(`Created ${provider} provider`);
         } catch (createError) {
-          // If 409 conflict, try to find and update instead
+          // If 409 conflict, provider exists but wasn't in list (soft-deleted?)
+          // Try to find by name and update, or log the error
+          console.warn(`Provider ${provider} may already exist (409), trying alternate approach`);
           const retryProviders = await requestUrl({
-            url: `${this.baseUrl}/v1/providers`,
+            url: `${this.baseUrl}/v1/providers/`,
             headers: this.getHeaders(),
           });
-          const retryExisting = (retryProviders.json as Array<{ id: string; provider_type: string }>)
-            .find(p => p.provider_type === provider);
+          const retryExisting = (retryProviders.json as Array<{ id: string; name: string; provider_type: string }>)
+            .find(p => p.provider_type === provider || p.name === provider);
           if (retryExisting) {
             await requestUrl({
               url: `${this.baseUrl}/v1/providers/${retryExisting.id}`,
@@ -157,8 +162,10 @@ export class LettaService {
               headers: this.getHeaders(),
               body: JSON.stringify({ api_key: apiKey }),
             });
+            console.log(`Updated ${provider} provider on retry`);
           } else {
-            throw createError;
+            // Provider exists in DB but not visible - database issue
+            console.error(`Provider ${provider} exists in database but not retrievable. May need to reset Letta.`);
           }
         }
       }
