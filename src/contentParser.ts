@@ -2,8 +2,15 @@
  * Content parsing utilities for the therapist plugin
  */
 
-export const THERAPIST_PREFIX = '> **Therapist:**';
+export const THERAPIST_PREFIX = '> **Therapist:**'; // Default, but can be customized
 export const JOURNAL_HEADERS = ['# Journal', '## Journal', '### Journal'];
+
+/**
+ * Get the therapist prefix with custom name
+ */
+export function getTherapistPrefix(name: string = 'Therapist'): string {
+  return `> **${name}:**`;
+}
 
 /**
  * Extract new content since the last therapist response
@@ -61,10 +68,11 @@ export function isTherapistResponse(content: string): boolean {
  * Format a therapist response as a blockquote
  * Handles multi-line responses by blockquoting each line
  */
-export function formatResponse(response: string): string {
+export function formatResponse(response: string, therapistName: string = 'Therapist'): string {
+  const prefix = getTherapistPrefix(therapistName);
   const lines = response.split('\n');
   const blockquoted = lines.map((line, i) => {
-    if (i === 0) return `${THERAPIST_PREFIX} ${line}`;
+    if (i === 0) return `${prefix} ${line}`;
     if (line.trim() === '') return '>'; // Empty blockquote line preserves paragraph breaks
     return `> ${line}`;
   }).join('\n');

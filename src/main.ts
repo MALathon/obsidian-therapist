@@ -178,7 +178,7 @@ export default class TherapistPlugin extends Plugin {
         const cursor = editor.getCursor();
         const line = cursor.line;
         editor.setCursor({ line, ch: editor.getLine(line).length });
-        editor.replaceSelection(formatResponse(response));
+        editor.replaceSelection(formatResponse(response, this.settings.therapistName));
       }
     } catch (error) {
       console.error('Error getting therapist response:', error);

@@ -208,8 +208,10 @@ export class LettaService {
 
     // For non-letta models, specify the provider name for API key resolution
     if (providerName && providerName !== 'letta' && providerName !== 'ollama') {
+      // Strip provider prefix from model name for the API (e.g., "anthropic/claude-sonnet" -> "claude-sonnet")
+      const modelName = model.includes('/') ? model.split('/').slice(1).join('/') : model;
       agentConfig.llm_config = {
-        model: model,
+        model: modelName,
         model_endpoint_type: providerName,
         provider_name: providerName,
         context_window: 200000,  // Claude models have large context

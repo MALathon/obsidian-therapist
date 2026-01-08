@@ -7,8 +7,9 @@ export interface TherapistSettings {
   openaiApiKey: string;
   anthropicApiKey: string;
   agentId: string;
-  agentName: string;  // Cached agent name
+  agentName: string;  // Cached agent name from Letta
   agentModel: string; // Cached agent model
+  therapistName: string; // Custom display name for the therapist
   enabled: boolean;
   debounceMs: number;
 }
@@ -21,6 +22,7 @@ export const DEFAULT_SETTINGS: TherapistSettings = {
   agentId: '',
   agentName: '',
   agentModel: '',
+  therapistName: 'Therapist',
   enabled: true,
   debounceMs: 3000,
 };
@@ -55,19 +57,25 @@ export class TherapistSettingTab extends PluginSettingTab {
     if (hasAgent) {
       containerEl.createEl('h2', { text: 'Your Therapist' });
 
-      // Agent info card
-      const agentCard = containerEl.createDiv({ cls: 'therapist-agent-card' });
+      // Therapist name - editable
+      new Setting(containerEl)
+        .setName('Name')
+        .setDesc('What should your therapist call themselves?')
+        .addText(text => text
+          .setPlaceholder('Therapist')
+          .setValue(this.plugin.settings.therapistName)
+          .onChange(async (value) => {
+            this.plugin.settings.therapistName = value || 'Therapist';
+            await this.plugin.saveSettings();
+          }));
 
-      const nameRow = agentCard.createDiv({ cls: 'therapist-agent-row' });
-      nameRow.createSpan({ text: this.plugin.settings.agentName || 'therapist', cls: 'therapist-agent-name' });
-
-      const modelBadge = nameRow.createSpan({
-        text: this.plugin.settings.agentModel || 'unknown model',
-        cls: 'therapist-agent-model'
+      // Model info (read-only)
+      const modelSetting = new Setting(containerEl)
+        .setName('Model');
+      modelSetting.descEl.createSpan({
+        text: this.plugin.settings.agentModel || 'unknown',
+        cls: 'therapist-model-badge'
       });
-      modelBadge.style.fontSize = '0.8em';
-      modelBadge.style.opacity = '0.7';
-      modelBadge.style.marginLeft = '8px';
 
       // Enable/disable toggle
       new Setting(containerEl)
@@ -103,6 +111,7 @@ export class TherapistSettingTab extends PluginSettingTab {
             this.plugin.settings.agentId = '';
             this.plugin.settings.agentName = '';
             this.plugin.settings.agentModel = '';
+            this.plugin.settings.therapistName = 'Therapist';
             await this.plugin.saveSettings();
             this.display();
           }));
