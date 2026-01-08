@@ -122,29 +122,46 @@ export class LettaService {
       const existing = providers.find(p => p.provider_type === provider);
 
       if (existing) {
-        // Delete and recreate to ensure clean state
+        // Update existing provider with PATCH
+        await requestUrl({
+          url: `${this.baseUrl}/v1/providers/${existing.id}`,
+          method: 'PATCH',
+          headers: this.getHeaders(),
+          body: JSON.stringify({ api_key: apiKey }),
+        });
+      } else {
+        // Create new provider
         try {
           await requestUrl({
-            url: `${this.baseUrl}/v1/providers/${existing.id}`,
-            method: 'DELETE',
+            url: `${this.baseUrl}/v1/providers`,
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: JSON.stringify({
+              name: provider,
+              provider_type: provider,
+              api_key: apiKey,
+            }),
+          });
+        } catch (createError) {
+          // If 409 conflict, try to find and update instead
+          const retryProviders = await requestUrl({
+            url: `${this.baseUrl}/v1/providers`,
             headers: this.getHeaders(),
           });
-        } catch {
-          // Ignore delete errors
+          const retryExisting = (retryProviders.json as Array<{ id: string; provider_type: string }>)
+            .find(p => p.provider_type === provider);
+          if (retryExisting) {
+            await requestUrl({
+              url: `${this.baseUrl}/v1/providers/${retryExisting.id}`,
+              method: 'PATCH',
+              headers: this.getHeaders(),
+              body: JSON.stringify({ api_key: apiKey }),
+            });
+          } else {
+            throw createError;
+          }
         }
       }
-
-      // Create provider
-      await requestUrl({
-        url: `${this.baseUrl}/v1/providers`,
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify({
-          name: provider,
-          provider_type: provider,
-          api_key: apiKey,
-        }),
-      });
     } catch (error) {
       console.warn(`Failed to update provider key:`, error);
     }
