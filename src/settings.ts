@@ -9,6 +9,10 @@ export interface TherapistSettings {
   agentId: string;  // Single agent, simple
   enabled: boolean;
   debounceMs: number;
+  // Indexing settings
+  autoIndex: boolean;
+  indexMode: 'whitelist' | 'blacklist';
+  indexFolders: string;  // Comma-separated folder paths
 }
 
 export const DEFAULT_SETTINGS: TherapistSettings = {
@@ -19,6 +23,9 @@ export const DEFAULT_SETTINGS: TherapistSettings = {
   agentId: '',
   enabled: true,
   debounceMs: 3000,
+  autoIndex: true,
+  indexMode: 'blacklist',
+  indexFolders: '',  // Empty = index all (blacklist mode) or none (whitelist mode)
 };
 
 export class TherapistSettingTab extends PluginSettingTab {
@@ -254,15 +261,53 @@ export class TherapistSettingTab extends PluginSettingTab {
     if (hasAgent) {
       containerEl.createEl('h3', { text: 'Vault Context' });
       containerEl.createEl('p', {
-        text: 'Index your vault to give the therapist context about your notes.',
+        text: 'Notes with ## Journal headers are always indexed. Configure which other folders to include.',
         cls: 'setting-item-description',
       });
 
       new Setting(containerEl)
-        .setName('Index Vault')
-        .setDesc('Indexes all markdown files for therapist context')
+        .setName('Auto-index')
+        .setDesc('Automatically index files when they change')
+        .addToggle(toggle => toggle
+          .setValue(this.plugin.settings.autoIndex)
+          .onChange(async (value) => {
+            this.plugin.settings.autoIndex = value;
+            await this.plugin.saveSettings();
+            if (value) {
+              this.plugin.startAutoIndexing();
+            } else {
+              this.plugin.stopAutoIndexing();
+            }
+          }));
+
+      new Setting(containerEl)
+        .setName('Folder mode')
+        .setDesc('Whitelist: only index listed folders. Blacklist: index all except listed.')
+        .addDropdown(dropdown => dropdown
+          .addOption('blacklist', 'Blacklist (exclude folders)')
+          .addOption('whitelist', 'Whitelist (only these folders)')
+          .setValue(this.plugin.settings.indexMode)
+          .onChange(async (value: 'whitelist' | 'blacklist') => {
+            this.plugin.settings.indexMode = value;
+            await this.plugin.saveSettings();
+          }));
+
+      new Setting(containerEl)
+        .setName('Folders')
+        .setDesc('Comma-separated folder paths (e.g., "private, drafts, templates")')
+        .addText(text => text
+          .setPlaceholder('folder1, folder2')
+          .setValue(this.plugin.settings.indexFolders)
+          .onChange(async (value) => {
+            this.plugin.settings.indexFolders = value;
+            await this.plugin.saveSettings();
+          }));
+
+      new Setting(containerEl)
+        .setName('Reindex Vault')
+        .setDesc('Full reindex of all matching files')
         .addButton(button => button
-          .setButtonText('Index Now')
+          .setButtonText('Reindex Now')
           .onClick(async () => {
             if (this.plugin.isIndexing) {
               new Notice('Indexing already in progress');
@@ -271,8 +316,10 @@ export class TherapistSettingTab extends PluginSettingTab {
             button.setDisabled(true);
             button.setButtonText('Indexing...');
             try {
+              const filter = this.plugin.getIndexFilter();
               const result = await this.plugin.vaultIndexer.indexVault(
-                this.plugin.settings.agentId
+                this.plugin.settings.agentId,
+                filter
               );
               new Notice(`Indexed ${result.files} files (${result.passages} passages)`);
             } catch (error) {
@@ -280,7 +327,7 @@ export class TherapistSettingTab extends PluginSettingTab {
               new Notice(`Indexing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
             } finally {
               button.setDisabled(false);
-              button.setButtonText('Index Now');
+              button.setButtonText('Reindex Now');
             }
           }));
     }

@@ -1,7 +1,7 @@
-import { Plugin, MarkdownView, Editor, debounce, Notice } from 'obsidian';
+import { Plugin, MarkdownView, Editor, debounce, Notice, TFile, EventRef } from 'obsidian';
 import { TherapistSettingTab, TherapistSettings, DEFAULT_SETTINGS } from './settings';
 import { LettaService } from './LettaService';
-import { VaultIndexer } from './VaultIndexer';
+import { VaultIndexer, IndexFilter } from './VaultIndexer';
 import { getNewContent, isTherapistResponse, formatResponse, getJournalContent, hasEngagementCue } from './contentParser';
 
 export default class TherapistPlugin extends Plugin {
@@ -11,6 +11,9 @@ export default class TherapistPlugin extends Plugin {
   private isProcessing: boolean = false;
   isIndexing: boolean = false;
   private statusBarEl: HTMLElement | null = null;
+  private autoIndexEvents: EventRef[] = [];
+  private indexQueue: Set<string> = new Set();
+  private indexDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   async onload() {
     await this.loadSettings();
@@ -59,10 +62,10 @@ export default class TherapistPlugin extends Plugin {
       }
     });
 
-    // Add command to index vault
+    // Add command to reindex vault
     this.addCommand({
       id: 'index-vault',
-      name: 'Index vault for therapist context',
+      name: 'Reindex vault for therapist context',
       callback: async () => {
         if (!this.settings.agentId) {
           new Notice('Create an agent first in settings');
@@ -74,7 +77,8 @@ export default class TherapistPlugin extends Plugin {
         }
         this.isIndexing = true;
         try {
-          const result = await this.vaultIndexer.indexVault(this.settings.agentId);
+          const filter = this.getIndexFilter();
+          const result = await this.vaultIndexer.indexVault(this.settings.agentId, filter);
           new Notice(`Indexed ${result.files} files (${result.passages} passages)`);
         } catch (error) {
           console.error('Indexing failed:', error);
@@ -106,7 +110,101 @@ export default class TherapistPlugin extends Plugin {
     // Initial check
     this.checkCurrentNote();
 
+    // Start auto-indexing if enabled
+    if (this.settings.autoIndex && this.settings.agentId) {
+      this.startAutoIndexing();
+    }
+
     console.log('Therapist plugin loaded');
+  }
+
+  /**
+   * Get the current index filter from settings
+   */
+  getIndexFilter(): IndexFilter {
+    return {
+      mode: this.settings.indexMode,
+      folders: this.settings.indexFolders.split(',').map(f => f.trim()).filter(f => f)
+    };
+  }
+
+  /**
+   * Start watching for file changes to auto-index
+   */
+  startAutoIndexing() {
+    this.stopAutoIndexing(); // Clear any existing watchers
+
+    if (!this.settings.agentId) return;
+
+    // Watch for file modifications
+    const modifyRef = this.app.vault.on('modify', (file) => {
+      if (file instanceof TFile && file.extension === 'md') {
+        this.queueFileForIndexing(file);
+      }
+    });
+    this.autoIndexEvents.push(modifyRef);
+    this.registerEvent(modifyRef);
+
+    // Watch for new files
+    const createRef = this.app.vault.on('create', (file) => {
+      if (file instanceof TFile && file.extension === 'md') {
+        this.queueFileForIndexing(file);
+      }
+    });
+    this.autoIndexEvents.push(createRef);
+    this.registerEvent(createRef);
+
+    console.log('Auto-indexing started');
+  }
+
+  /**
+   * Stop watching for file changes
+   */
+  stopAutoIndexing() {
+    // Events are auto-cleaned by Obsidian on unload, but we track for manual stop
+    this.autoIndexEvents = [];
+    if (this.indexDebounceTimer) {
+      clearTimeout(this.indexDebounceTimer);
+      this.indexDebounceTimer = null;
+    }
+    this.indexQueue.clear();
+    console.log('Auto-indexing stopped');
+  }
+
+  /**
+   * Queue a file for indexing (debounced to batch changes)
+   */
+  private queueFileForIndexing(file: TFile) {
+    this.indexQueue.add(file.path);
+
+    // Debounce: wait 5 seconds after last change before indexing
+    if (this.indexDebounceTimer) {
+      clearTimeout(this.indexDebounceTimer);
+    }
+
+    this.indexDebounceTimer = setTimeout(() => {
+      this.processIndexQueue();
+    }, 5000);
+  }
+
+  /**
+   * Process all queued files for indexing
+   */
+  private async processIndexQueue() {
+    if (this.indexQueue.size === 0) return;
+    if (!this.settings.agentId) return;
+
+    const paths = [...this.indexQueue];
+    this.indexQueue.clear();
+
+    const filter = this.getIndexFilter();
+
+    for (const path of paths) {
+      const file = this.app.vault.getAbstractFileByPath(path);
+      if (file instanceof TFile) {
+        await this.vaultIndexer.indexSingleFile(file, this.settings.agentId, filter);
+      }
+    }
   }
 
   private checkCurrentNote() {
@@ -219,6 +317,7 @@ export default class TherapistPlugin extends Plugin {
   }
 
   onunload() {
+    this.stopAutoIndexing();
     console.log('Therapist plugin unloaded');
   }
 
