@@ -93,7 +93,7 @@ export class LettaService {
    */
   async listModels(): Promise<Array<{ handle: string; name: string; provider: string }>> {
     const response = await requestUrl({
-      url: `${this.baseUrl}/v1/models/`,
+      url: `${this.baseUrl}/v1/models`,
       headers: this.getHeaders(),
     });
     if (response.status !== 200) {
@@ -114,7 +114,7 @@ export class LettaService {
     try {
       // First check if provider exists
       const existingProviders = await requestUrl({
-        url: `${this.baseUrl}/v1/providers/`,
+        url: `${this.baseUrl}/v1/providers`,
         headers: this.getHeaders(),
       });
 
@@ -122,26 +122,29 @@ export class LettaService {
       const existing = providers.find(p => p.provider_type === provider);
 
       if (existing) {
-        // Update existing provider
-        await requestUrl({
-          url: `${this.baseUrl}/v1/providers/${existing.id}/`,
-          method: 'PATCH',
-          headers: this.getHeaders(),
-          body: JSON.stringify({ api_key: apiKey }),
-        });
-      } else {
-        // Create new provider
-        await requestUrl({
-          url: `${this.baseUrl}/v1/providers/`,
-          method: 'POST',
-          headers: this.getHeaders(),
-          body: JSON.stringify({
-            name: provider,
-            provider_type: provider,
-            api_key: apiKey,
-          }),
-        });
+        // Delete and recreate to ensure clean state
+        try {
+          await requestUrl({
+            url: `${this.baseUrl}/v1/providers/${existing.id}`,
+            method: 'DELETE',
+            headers: this.getHeaders(),
+          });
+        } catch {
+          // Ignore delete errors
+        }
       }
+
+      // Create provider
+      await requestUrl({
+        url: `${this.baseUrl}/v1/providers`,
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          name: provider,
+          provider_type: provider,
+          api_key: apiKey,
+        }),
+      });
     } catch (error) {
       console.warn(`Failed to update provider key:`, error);
     }
@@ -159,26 +162,40 @@ export class LettaService {
   ): Promise<string> {
     const persona = customPersona || ROLE_PERSONAS[role] || ROLE_PERSONAS.custom;
 
+    // Extract provider from model string (e.g., "anthropic/claude..." -> "anthropic")
+    const providerName = model.includes('/') ? model.split('/')[0] : null;
+
+    const agentConfig: Record<string, unknown> = {
+      name: name,
+      model: model,
+      embedding: embedding,
+      enable_sleeptime: true,
+      memory_blocks: [
+        {
+          label: 'persona',
+          value: persona
+        },
+        {
+          label: 'human',
+          value: '[Learning about you through our sessions...]'
+        }
+      ]
+    };
+
+    // For non-letta models, specify the provider name for API key resolution
+    if (providerName && providerName !== 'letta' && providerName !== 'ollama') {
+      agentConfig.llm_config = {
+        model: model,
+        model_endpoint_type: providerName,
+        provider_name: providerName,
+      };
+    }
+
     const response = await requestUrl({
-      url: `${this.baseUrl}/v1/agents/`,
+      url: `${this.baseUrl}/v1/agents`,
       method: 'POST',
       headers: this.getHeaders(),
-      body: JSON.stringify({
-        name: name,
-        model: model,
-        embedding: embedding,
-        enable_sleeptime: true,
-        memory_blocks: [
-          {
-            label: 'persona',
-            value: persona
-          },
-          {
-            label: 'human',
-            value: '[Learning about you through our sessions...]'
-          }
-        ]
-      })
+      body: JSON.stringify(agentConfig)
     });
 
     if (response.status !== 200) {
@@ -193,7 +210,7 @@ export class LettaService {
    */
   async sendMessage(agentId: string, content: string): Promise<string> {
     const response = await requestUrl({
-      url: `${this.baseUrl}/v1/agents/${agentId}/messages/`,
+      url: `${this.baseUrl}/v1/agents/${agentId}/messages`,
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -226,6 +243,31 @@ export class LettaService {
   }
 
   /**
+   * Get agent details
+   */
+  async getAgent(agentId: string): Promise<{ id: string; name: string; model: string } | null> {
+    try {
+      const response = await requestUrl({
+        url: `${this.baseUrl}/v1/agents/${agentId}`,
+        headers: this.getHeaders(),
+      });
+
+      if (response.status !== 200) {
+        return null;
+      }
+
+      const data = response.json;
+      return {
+        id: data.id,
+        name: data.name,
+        model: data.model || data.llm_config?.model || 'unknown',
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Delete an agent from Letta
    */
   async deleteAgent(agentId: string): Promise<void> {
@@ -246,7 +288,7 @@ export class LettaService {
   async healthCheck(): Promise<boolean> {
     try {
       const response = await requestUrl({
-        url: `${this.baseUrl}/v1/health/`,
+        url: `${this.baseUrl}/v1/health`,
       });
       return response.status === 200;
     } catch {
