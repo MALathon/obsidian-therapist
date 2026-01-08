@@ -9,38 +9,53 @@
   pointer-events: auto;
 }
 
+/* The orb - dim when observing, glowing when has insight */
 .therapist-orb {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
-  box-shadow:
-    0 4px 20px rgba(99, 102, 241, 0.4),
-    0 0 40px rgba(139, 92, 246, 0.2);
+  background: linear-gradient(135deg, #3f3f46 0%, #52525b 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  animation: therapist-pulse 2s ease-in-out infinite;
+  transition: all 0.3s ease;
+  opacity: 0.6;
+}
+
+.therapist-orb::before {
+  content: '○';
+  font-size: 16px;
+  color: #a1a1aa;
 }
 
 .therapist-orb:hover {
+  opacity: 0.8;
+  transform: scale(1.05);
+}
+
+/* Has insight - glowing state */
+.therapist-orb.has-insight {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+  box-shadow:
+    0 4px 20px rgba(99, 102, 241, 0.4),
+    0 0 40px rgba(139, 92, 246, 0.2);
+  opacity: 1;
+  animation: therapist-pulse 2s ease-in-out infinite;
+}
+
+.therapist-orb.has-insight::before {
+  content: '💭';
+  font-size: 18px;
+  filter: grayscale(1) brightness(10);
+}
+
+.therapist-orb.has-insight:hover {
   transform: scale(1.1);
   box-shadow:
     0 6px 28px rgba(99, 102, 241, 0.5),
     0 0 60px rgba(139, 92, 246, 0.3);
-}
-
-.therapist-orb:active {
-  transform: scale(0.95);
-}
-
-/* Thought bubble icon */
-.therapist-orb::before {
-  content: '💭';
-  font-size: 20px;
-  filter: grayscale(1) brightness(10);
 }
 
 /* Pulse animation */
@@ -55,6 +70,25 @@
       0 4px 30px rgba(99, 102, 241, 0.6),
       0 0 60px rgba(139, 92, 246, 0.4);
   }
+}
+
+/* Thinking state */
+.therapist-orb.is-thinking {
+  background: linear-gradient(135deg, #64748b 0%, #94a3b8 100%);
+  box-shadow: 0 4px 20px rgba(100, 116, 139, 0.3);
+  opacity: 0.9;
+  animation: therapist-thinking 2s linear infinite;
+}
+
+.therapist-orb.is-thinking::before {
+  content: '◉';
+  font-size: 16px;
+  color: white;
+}
+
+@keyframes therapist-thinking {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* Fade in animation */
@@ -73,56 +107,110 @@
   }
 }
 
-/* Thinking state - subtle rotation */
-.therapist-orb.is-thinking {
-  animation: therapist-thinking 1.5s linear infinite;
-  background: linear-gradient(135deg, #64748b 0%, #94a3b8 100%);
+/* Insight popover */
+.therapist-popover {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 12px;
+  width: 320px;
+  max-width: calc(100vw - 48px);
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
   box-shadow:
-    0 4px 20px rgba(100, 116, 139, 0.3),
-    0 0 30px rgba(148, 163, 184, 0.2);
+    0 8px 32px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px);
+  transition: all 0.2s ease;
+  pointer-events: none;
 }
 
-.therapist-orb.is-thinking::before {
-  content: '◉';
-  font-size: 18px;
+.therapist-popover.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.therapist-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.therapist-popover-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.therapist-popover-dismiss {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  line-height: 1;
+  font-size: 16px;
+}
+
+.therapist-popover-dismiss:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.therapist-popover-content {
+  padding: 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-normal);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.therapist-popover-actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.therapist-popover-btn {
+  flex: 1;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: none;
+}
+
+.therapist-popover-btn.primary {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   color: white;
 }
 
-@keyframes therapist-thinking {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.therapist-popover-btn.primary:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
 }
 
-/* Tooltip */
-.therapist-orb::after {
-  content: 'Insert thought';
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-bottom: 8px;
-  padding: 6px 12px;
+.therapist-popover-btn.secondary {
   background: var(--background-secondary);
   color: var(--text-normal);
-  border-radius: 6px;
-  font-size: 12px;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
-.therapist-orb:hover::after {
-  opacity: 1;
-}
-
-.therapist-orb.is-thinking::after {
-  content: 'Thinking...';
+.therapist-popover-btn.secondary:hover {
+  background: var(--background-modifier-hover);
 }
 
 /* Status bar clickable enhancement */
