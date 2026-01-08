@@ -212,11 +212,12 @@ export class LettaService {
         model: model,
         model_endpoint_type: providerName,
         provider_name: providerName,
+        context_window: 200000,  // Claude models have large context
       };
     }
 
     const response = await requestUrl({
-      url: `${this.baseUrl}/v1/agents`,
+      url: `${this.baseUrl}/v1/agents/`,
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify(agentConfig)
