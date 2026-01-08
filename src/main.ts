@@ -163,6 +163,9 @@ export default class TherapistPlugin extends Plugin {
     if (this.isProcessing) return;
     if (!this.settings.agentId) return;
 
+    // Don't observe if we already have a pending insight
+    if (this.pendingInsight) return;
+
     const fullContent = editor.getValue();
     const newContent = getNewContent(fullContent);
     if (!newContent) return;
