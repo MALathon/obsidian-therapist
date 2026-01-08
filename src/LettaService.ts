@@ -226,6 +226,21 @@ export class LettaService {
   }
 
   /**
+   * Delete an agent from Letta
+   */
+  async deleteAgent(agentId: string): Promise<void> {
+    const response = await requestUrl({
+      url: `${this.baseUrl}/v1/agents/${agentId}/`,
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+
+    if (response.status !== 200 && response.status !== 204) {
+      throw new Error(`Failed to delete agent: ${response.text}`);
+    }
+  }
+
+  /**
    * Check if the Letta server is reachable
    */
   async healthCheck(): Promise<boolean> {

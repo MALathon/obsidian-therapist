@@ -89,7 +89,41 @@ export default class TherapistPlugin extends Plugin {
     this.statusBarEl = this.addStatusBarItem();
     this.updateStatusBar();
 
+    // Update status when switching notes
+    this.registerEvent(
+      this.app.workspace.on('active-leaf-change', () => {
+        this.checkCurrentNote();
+      })
+    );
+
+    // Also check on file open
+    this.registerEvent(
+      this.app.workspace.on('file-open', () => {
+        this.checkCurrentNote();
+      })
+    );
+
+    // Initial check
+    this.checkCurrentNote();
+
     console.log('Therapist plugin loaded');
+  }
+
+  private checkCurrentNote() {
+    if (!this.settings.enabled || !this.settings.agentId) {
+      this.updateStatusBar();
+      return;
+    }
+
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!view) {
+      this.updateStatusBar('no-journal');
+      return;
+    }
+
+    const content = view.editor.getValue();
+    const hasJournal = getJournalContent(content) !== null;
+    this.updateStatusBar(hasJournal ? 'listening' : 'no-journal');
   }
 
   private updateStatusBar(state?: 'listening' | 'thinking' | 'off' | 'no-journal') {

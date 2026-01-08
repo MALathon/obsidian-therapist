@@ -73,7 +73,6 @@ export class TherapistSettingTab extends PluginSettingTab {
       .setName('Letta API Key')
       .setDesc('Optional - only if your server requires it')
       .addText(text => {
-        text.inputEl.type = 'password';
         text
           .setPlaceholder('sk-let-...')
           .setValue(this.plugin.settings.apiKey)
@@ -94,7 +93,6 @@ export class TherapistSettingTab extends PluginSettingTab {
       .setName('OpenAI API Key')
       .setDesc('Uses GPT-4o')
       .addText(text => {
-        text.inputEl.type = 'password';
         text
           .setPlaceholder('sk-proj-...')
           .setValue(this.plugin.settings.openaiApiKey)
@@ -116,7 +114,6 @@ export class TherapistSettingTab extends PluginSettingTab {
       .setName('Anthropic API Key')
       .setDesc('Uses Claude Sonnet')
       .addText(text => {
-        text.inputEl.type = 'password';
         text
           .setPlaceholder('sk-ant-...')
           .setValue(this.plugin.settings.anthropicApiKey)
@@ -186,18 +183,40 @@ export class TherapistSettingTab extends PluginSettingTab {
         }));
 
     if (hasAgent) {
-      new Setting(containerEl)
+      const agentSetting = new Setting(containerEl)
         .setName('Agent')
         .setDesc(`ID: ${this.plugin.settings.agentId}`)
+        .addButton(button => button
+          .setButtonText('Copy ID')
+          .onClick(() => {
+            navigator.clipboard.writeText(this.plugin.settings.agentId);
+            new Notice('Agent ID copied');
+          }))
         .addButton(button => button
           .setButtonText('Delete Agent')
           .setWarning()
           .onClick(async () => {
+            try {
+              await this.plugin.lettaService.deleteAgent(this.plugin.settings.agentId);
+              new Notice('Agent deleted from Letta');
+            } catch (e) {
+              console.warn('Could not delete agent from Letta:', e);
+              new Notice('Agent removed locally (could not delete from server)');
+            }
             this.plugin.settings.agentId = '';
             await this.plugin.saveSettings();
-            new Notice('Agent removed');
             this.display();
           }));
+
+      // Make the ID selectable
+      const descEl = agentSetting.descEl;
+      descEl.empty();
+      const idSpan = descEl.createEl('code', {
+        text: this.plugin.settings.agentId,
+        cls: 'therapist-agent-id'
+      });
+      idSpan.style.userSelect = 'all';
+      idSpan.style.fontSize = '0.85em';
     } else {
       new Setting(containerEl)
         .setName('Create Therapist')
