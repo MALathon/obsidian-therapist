@@ -8,6 +8,7 @@ export default class TherapistPlugin extends Plugin {
   lettaService: LettaService;
   private isProcessing: boolean = false;
   private statusBarEl: HTMLElement | null = null;
+  private pendingResponse: string | null = null;
 
   async onload() {
     await this.loadSettings();
@@ -42,12 +43,28 @@ export default class TherapistPlugin extends Plugin {
       }
     });
 
+    // Add command to insert pending response
+    this.addCommand({
+      id: 'insert-response',
+      name: 'Insert therapist thought',
+      editorCallback: (editor: Editor) => {
+        if (this.pendingResponse) {
+          this.insertPendingResponse();
+        } else {
+          new Notice('No thought ready');
+        }
+      }
+    });
+
     // Add command to start/toggle session
     this.addCommand({
       id: 'toggle-therapist',
       name: 'Toggle therapist on/off',
       callback: () => {
         this.settings.enabled = !this.settings.enabled;
+        if (!this.settings.enabled) {
+          this.pendingResponse = null; // Clear pending when disabled
+        }
         this.saveSettings();
         this.updateStatusBar();
         const status = this.settings.enabled ? 'enabled' : 'disabled';
@@ -55,8 +72,14 @@ export default class TherapistPlugin extends Plugin {
       }
     });
 
-    // Add status bar indicator
+    // Add status bar indicator with click handler
     this.statusBarEl = this.addStatusBarItem();
+    this.statusBarEl.addClass('mod-clickable');
+    this.statusBarEl.onClickEvent(() => {
+      if (this.pendingResponse) {
+        this.insertPendingResponse();
+      }
+    });
     this.updateStatusBar();
 
     // Update status when switching notes
@@ -80,6 +103,9 @@ export default class TherapistPlugin extends Plugin {
   }
 
   private checkCurrentNote() {
+    // Clear pending response when switching notes
+    this.pendingResponse = null;
+
     if (!this.settings.enabled || !this.settings.agentId) {
       this.updateStatusBar();
       return;
@@ -96,7 +122,7 @@ export default class TherapistPlugin extends Plugin {
     this.updateStatusBar(hasJournal ? 'listening' : 'no-journal');
   }
 
-  updateStatusBar(state?: 'listening' | 'thinking' | 'off' | 'no-journal') {
+  updateStatusBar(state?: 'listening' | 'thinking' | 'ready' | 'off' | 'no-journal') {
     if (!this.statusBarEl) return;
 
     if (!this.settings.enabled) {
@@ -115,6 +141,10 @@ export default class TherapistPlugin extends Plugin {
       case 'thinking':
         this.statusBarEl.setText('◉ Thinking...');
         this.statusBarEl.setAttribute('aria-label', 'Therapist is processing');
+        break;
+      case 'ready':
+        this.statusBarEl.setText('💭 Ready');
+        this.statusBarEl.setAttribute('aria-label', 'Click to insert response');
         break;
       case 'no-journal':
         this.statusBarEl.setText('◦ No journal section');
@@ -172,20 +202,43 @@ export default class TherapistPlugin extends Plugin {
         contextPrefix + newContent
       );
 
-      // Only insert if agent actually responded with content (not just listening)
+      // Buffer response instead of auto-inserting
       const trimmedResponse = response?.trim() || '';
       if (trimmedResponse && trimmedResponse !== '[listening]') {
-        const cursor = editor.getCursor();
-        const line = cursor.line;
-        editor.setCursor({ line, ch: editor.getLine(line).length });
-        editor.replaceSelection(formatResponse(response, this.settings.therapistName));
+        this.pendingResponse = response;
+        this.updateStatusBar('ready');
+        new Notice('💭 Thought ready - click status bar or use hotkey to insert');
+      } else {
+        this.updateStatusBar('listening');
       }
     } catch (error) {
       console.error('Error getting therapist response:', error);
+      this.updateStatusBar('listening');
     } finally {
       this.isProcessing = false;
-      this.updateStatusBar('listening');
     }
+  }
+
+  private insertPendingResponse() {
+    if (!this.pendingResponse) return;
+
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!view) {
+      new Notice('No active editor');
+      return;
+    }
+
+    const editor = view.editor;
+    const cursor = editor.getCursor();
+    const line = cursor.line;
+
+    // Move to end of current line and insert
+    editor.setCursor({ line, ch: editor.getLine(line).length });
+    editor.replaceSelection(formatResponse(this.pendingResponse, this.settings.therapistName));
+
+    // Clear the pending response
+    this.pendingResponse = null;
+    this.updateStatusBar('listening');
   }
 
   onunload() {
