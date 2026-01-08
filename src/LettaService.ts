@@ -230,7 +230,7 @@ export class LettaService {
    */
   async deleteAgent(agentId: string): Promise<void> {
     const response = await requestUrl({
-      url: `${this.baseUrl}/v1/agents/${agentId}/`,
+      url: `${this.baseUrl}/v1/agents/${agentId}`,
       method: 'DELETE',
       headers: this.getHeaders(),
     });
