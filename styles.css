@@ -1,0 +1,135 @@
+/* Therapist Plugin Styles */
+
+/* Floating thought indicator */
+.therapist-indicator {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  z-index: 100;
+  pointer-events: auto;
+}
+
+.therapist-orb {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+  box-shadow:
+    0 4px 20px rgba(99, 102, 241, 0.4),
+    0 0 40px rgba(139, 92, 246, 0.2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  animation: therapist-pulse 2s ease-in-out infinite;
+}
+
+.therapist-orb:hover {
+  transform: scale(1.1);
+  box-shadow:
+    0 6px 28px rgba(99, 102, 241, 0.5),
+    0 0 60px rgba(139, 92, 246, 0.3);
+}
+
+.therapist-orb:active {
+  transform: scale(0.95);
+}
+
+/* Thought bubble icon */
+.therapist-orb::before {
+  content: '💭';
+  font-size: 20px;
+  filter: grayscale(1) brightness(10);
+}
+
+/* Pulse animation */
+@keyframes therapist-pulse {
+  0%, 100% {
+    box-shadow:
+      0 4px 20px rgba(99, 102, 241, 0.4),
+      0 0 40px rgba(139, 92, 246, 0.2);
+  }
+  50% {
+    box-shadow:
+      0 4px 30px rgba(99, 102, 241, 0.6),
+      0 0 60px rgba(139, 92, 246, 0.4);
+  }
+}
+
+/* Fade in animation */
+.therapist-indicator.is-visible {
+  animation: therapist-fade-in 0.3s ease-out forwards;
+}
+
+@keyframes therapist-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Thinking state - subtle rotation */
+.therapist-orb.is-thinking {
+  animation: therapist-thinking 1.5s linear infinite;
+  background: linear-gradient(135deg, #64748b 0%, #94a3b8 100%);
+  box-shadow:
+    0 4px 20px rgba(100, 116, 139, 0.3),
+    0 0 30px rgba(148, 163, 184, 0.2);
+}
+
+.therapist-orb.is-thinking::before {
+  content: '◉';
+  font-size: 18px;
+  color: white;
+}
+
+@keyframes therapist-thinking {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Tooltip */
+.therapist-orb::after {
+  content: 'Insert thought';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 8px;
+  padding: 6px 12px;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.therapist-orb:hover::after {
+  opacity: 1;
+}
+
+.therapist-orb.is-thinking::after {
+  content: 'Thinking...';
+}
+
+/* Status bar clickable enhancement */
+.mod-clickable {
+  cursor: pointer;
+}
+
+.mod-clickable:hover {
+  color: var(--text-accent);
+}

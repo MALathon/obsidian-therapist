@@ -9,6 +9,7 @@ export default class TherapistPlugin extends Plugin {
   private isProcessing: boolean = false;
   private statusBarEl: HTMLElement | null = null;
   private pendingResponse: string | null = null;
+  private indicatorEl: HTMLElement | null = null;
 
   async onload() {
     await this.loadSettings();
@@ -63,7 +64,8 @@ export default class TherapistPlugin extends Plugin {
       callback: () => {
         this.settings.enabled = !this.settings.enabled;
         if (!this.settings.enabled) {
-          this.pendingResponse = null; // Clear pending when disabled
+          this.pendingResponse = null;
+          this.updateIndicator('hidden');
         }
         this.saveSettings();
         this.updateStatusBar();
@@ -105,6 +107,7 @@ export default class TherapistPlugin extends Plugin {
   private checkCurrentNote() {
     // Clear pending response when switching notes
     this.pendingResponse = null;
+    this.updateIndicator('hidden');
 
     if (!this.settings.enabled || !this.settings.agentId) {
       this.updateStatusBar();
@@ -190,6 +193,7 @@ export default class TherapistPlugin extends Plugin {
 
     this.isProcessing = true;
     this.updateStatusBar('thinking');
+    this.updateIndicator('thinking');
 
     try {
       // Tell agent whether user is explicitly engaging
@@ -207,13 +211,15 @@ export default class TherapistPlugin extends Plugin {
       if (trimmedResponse && trimmedResponse !== '[listening]') {
         this.pendingResponse = response;
         this.updateStatusBar('ready');
-        new Notice('💭 Thought ready - click status bar or use hotkey to insert');
+        this.updateIndicator('ready');
       } else {
         this.updateStatusBar('listening');
+        this.updateIndicator('hidden');
       }
     } catch (error) {
       console.error('Error getting therapist response:', error);
       this.updateStatusBar('listening');
+      this.updateIndicator('hidden');
     } finally {
       this.isProcessing = false;
     }
@@ -239,9 +245,57 @@ export default class TherapistPlugin extends Plugin {
     // Clear the pending response
     this.pendingResponse = null;
     this.updateStatusBar('listening');
+    this.updateIndicator('hidden');
+  }
+
+  private updateIndicator(state: 'thinking' | 'ready' | 'hidden') {
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+
+    if (state === 'hidden' || !view) {
+      // Remove indicator if it exists
+      if (this.indicatorEl) {
+        this.indicatorEl.remove();
+        this.indicatorEl = null;
+      }
+      return;
+    }
+
+    // Get the editor container to position the indicator
+    const editorEl = view.contentEl;
+
+    // Create indicator if it doesn't exist
+    if (!this.indicatorEl) {
+      this.indicatorEl = document.createElement('div');
+      this.indicatorEl.className = 'therapist-indicator';
+
+      const orb = document.createElement('div');
+      orb.className = 'therapist-orb';
+      orb.addEventListener('click', () => {
+        if (this.pendingResponse) {
+          this.insertPendingResponse();
+        }
+      });
+
+      this.indicatorEl.appendChild(orb);
+    }
+
+    // Update orb state
+    const orb = this.indicatorEl.querySelector('.therapist-orb');
+    if (orb) {
+      orb.classList.toggle('is-thinking', state === 'thinking');
+    }
+
+    // Ensure indicator is in the editor
+    if (!editorEl.contains(this.indicatorEl)) {
+      editorEl.appendChild(this.indicatorEl);
+    }
+
+    // Add visible class for animation
+    this.indicatorEl.classList.add('is-visible');
   }
 
   onunload() {
+    this.updateIndicator('hidden');
     console.log('Therapist plugin unloaded');
   }
 
