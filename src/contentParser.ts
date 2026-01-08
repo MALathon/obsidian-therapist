@@ -17,8 +17,13 @@ export function getTherapistPrefix(name: string = 'Therapist'): string {
  * Returns the text the user has written after the most recent therapist response
  */
 export function getNewContent(fullContent: string): string {
-  // Find the last therapist response
-  const lastResponseIndex = fullContent.lastIndexOf(THERAPIST_PREFIX);
+  // Find the last therapist response - match pattern > **AnyName:**
+  const responsePattern = /^>\s*\*\*[^*]+:\*\*/gm;
+  let lastResponseIndex = -1;
+  let match;
+  while ((match = responsePattern.exec(fullContent)) !== null) {
+    lastResponseIndex = match.index;
+  }
 
   if (lastResponseIndex === -1) {
     // No previous response, return all content
@@ -59,9 +64,12 @@ export function getNewContent(fullContent: string): string {
 
 /**
  * Check if content is a therapist response (to avoid responding to own responses)
+ * Matches any blockquote with bold name format: > **Name:**
  */
 export function isTherapistResponse(content: string): boolean {
-  return content.trim().startsWith(THERAPIST_PREFIX);
+  const trimmed = content.trim();
+  // Match pattern: > **AnyName:**
+  return /^>\s*\*\*[^*]+:\*\*/.test(trimmed);
 }
 
 /**
