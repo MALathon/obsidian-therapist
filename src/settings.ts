@@ -231,6 +231,41 @@ export class TherapistSettingTab extends PluginSettingTab {
           }));
     }
 
+    // Vault indexing
+    if (hasAgent) {
+      containerEl.createEl('h3', { text: 'Vault Context' });
+      containerEl.createEl('p', {
+        text: 'Index your vault to give the therapist context about your notes.',
+        cls: 'setting-item-description',
+      });
+
+      new Setting(containerEl)
+        .setName('Index Vault')
+        .setDesc('Indexes all markdown files for therapist context')
+        .addButton(button => button
+          .setButtonText('Index Now')
+          .onClick(async () => {
+            if (this.plugin.isIndexing) {
+              new Notice('Indexing already in progress');
+              return;
+            }
+            button.setDisabled(true);
+            button.setButtonText('Indexing...');
+            try {
+              const result = await this.plugin.vaultIndexer.indexVault(
+                this.plugin.settings.agentId
+              );
+              new Notice(`Indexed ${result.files} files (${result.passages} passages)`);
+            } catch (error) {
+              console.error('Indexing failed:', error);
+              new Notice(`Indexing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            } finally {
+              button.setDisabled(false);
+              button.setButtonText('Index Now');
+            }
+          }));
+    }
+
     // Test connection button
     new Setting(containerEl)
       .setName('Test Connection')

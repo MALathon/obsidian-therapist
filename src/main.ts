@@ -1,17 +1,22 @@
 import { Plugin, MarkdownView, Editor, debounce, Notice } from 'obsidian';
 import { TherapistSettingTab, TherapistSettings, DEFAULT_SETTINGS } from './settings';
 import { LettaService } from './LettaService';
+import { VaultIndexer } from './VaultIndexer';
 import { getNewContent, isTherapistResponse, formatResponse, getJournalContent, hasEngagementCue } from './contentParser';
 
 export default class TherapistPlugin extends Plugin {
   settings: TherapistSettings;
   lettaService: LettaService;
+  vaultIndexer: VaultIndexer;
   private isProcessing: boolean = false;
+  isIndexing: boolean = false;
+  private statusBarEl: HTMLElement | null = null;
 
   async onload() {
     await this.loadSettings();
 
     this.lettaService = new LettaService(this.settings.lettaUrl, this.settings.apiKey);
+    this.vaultIndexer = new VaultIndexer(this.app, this.lettaService);
 
     // Add settings tab
     this.addSettingTab(new TherapistSettingTab(this.app, this));
@@ -48,12 +53,77 @@ export default class TherapistPlugin extends Plugin {
       callback: () => {
         this.settings.enabled = !this.settings.enabled;
         this.saveSettings();
+        this.updateStatusBar();
         const status = this.settings.enabled ? 'enabled' : 'disabled';
         new Notice(`Therapist ${status}`);
       }
     });
 
+    // Add command to index vault
+    this.addCommand({
+      id: 'index-vault',
+      name: 'Index vault for therapist context',
+      callback: async () => {
+        if (!this.settings.agentId) {
+          new Notice('Create an agent first in settings');
+          return;
+        }
+        if (this.isIndexing) {
+          new Notice('Indexing already in progress');
+          return;
+        }
+        this.isIndexing = true;
+        try {
+          const result = await this.vaultIndexer.indexVault(this.settings.agentId);
+          new Notice(`Indexed ${result.files} files (${result.passages} passages)`);
+        } catch (error) {
+          console.error('Indexing failed:', error);
+          new Notice(`Indexing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        } finally {
+          this.isIndexing = false;
+        }
+      }
+    });
+
+    // Add status bar indicator
+    this.statusBarEl = this.addStatusBarItem();
+    this.updateStatusBar();
+
     console.log('Therapist plugin loaded');
+  }
+
+  private updateStatusBar(state?: 'listening' | 'thinking' | 'off' | 'no-journal') {
+    if (!this.statusBarEl) return;
+
+    if (!this.settings.enabled) {
+      this.statusBarEl.setText('○ Therapist off');
+      this.statusBarEl.setAttribute('aria-label', 'Therapist is disabled');
+      return;
+    }
+
+    if (!this.settings.agentId) {
+      this.statusBarEl.setText('○ No agent');
+      this.statusBarEl.setAttribute('aria-label', 'No therapist agent configured');
+      return;
+    }
+
+    switch (state) {
+      case 'thinking':
+        this.statusBarEl.setText('◉ Thinking...');
+        this.statusBarEl.setAttribute('aria-label', 'Therapist is processing');
+        break;
+      case 'no-journal':
+        this.statusBarEl.setText('◦ No journal section');
+        this.statusBarEl.setAttribute('aria-label', 'Add a ## Journal header to enable');
+        break;
+      case 'off':
+        this.statusBarEl.setText('○ Therapist off');
+        this.statusBarEl.setAttribute('aria-label', 'Therapist is disabled');
+        break;
+      default:
+        this.statusBarEl.setText('● Listening');
+        this.statusBarEl.setAttribute('aria-label', 'Therapist is monitoring');
+    }
   }
 
   async handleEditorChange(editor: Editor, view: MarkdownView, forceRespond: boolean = false) {
@@ -68,8 +138,11 @@ export default class TherapistPlugin extends Plugin {
     // Only process notes with a Journal section
     const journalContent = getJournalContent(fullContent);
     if (!journalContent) {
+      this.updateStatusBar('no-journal');
       return; // No journal section, skip
     }
+
+    this.updateStatusBar('listening');
 
     // Get new content since last therapist response (within journal section)
     const newContent = getNewContent(journalContent);
@@ -82,6 +155,7 @@ export default class TherapistPlugin extends Plugin {
     const hasEngagement = hasEngagementCue(newContent);
 
     this.isProcessing = true;
+    this.updateStatusBar('thinking');
 
     try {
       // Tell agent whether user is explicitly engaging
@@ -106,6 +180,7 @@ export default class TherapistPlugin extends Plugin {
       console.error('Error getting therapist response:', error);
     } finally {
       this.isProcessing = false;
+      this.updateStatusBar('listening');
     }
   }
 

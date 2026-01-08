@@ -238,4 +238,109 @@ export class LettaService {
       return false;
     }
   }
+
+  /**
+   * Create an archive for storing vault content
+   */
+  async createArchive(name: string, embedding: string = 'letta/letta-free'): Promise<string> {
+    const response = await requestUrl({
+      url: `${this.baseUrl}/v1/archives/`,
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        name: name,
+        description: 'Obsidian vault content for therapist context',
+        embedding: embedding,
+      }),
+    });
+
+    if (response.status !== 200) {
+      throw new Error(`Failed to create archive: ${response.text}`);
+    }
+
+    return response.json.id;
+  }
+
+  /**
+   * List existing archives
+   */
+  async listArchives(): Promise<Array<{ id: string; name: string }>> {
+    const response = await requestUrl({
+      url: `${this.baseUrl}/v1/archives/`,
+      headers: this.getHeaders(),
+    });
+
+    if (response.status !== 200) {
+      throw new Error('Failed to list archives');
+    }
+
+    return response.json.map((a: { id: string; name: string }) => ({
+      id: a.id,
+      name: a.name,
+    }));
+  }
+
+  /**
+   * Add a passage (text chunk) to an archive
+   */
+  async addPassage(archiveId: string, text: string, metadata: Record<string, string> = {}): Promise<void> {
+    const response = await requestUrl({
+      url: `${this.baseUrl}/v1/archives/${archiveId}/passages/`,
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        text: text,
+        metadata: metadata,
+      }),
+    });
+
+    if (response.status !== 200) {
+      throw new Error(`Failed to add passage: ${response.text}`);
+    }
+  }
+
+  /**
+   * Attach an archive to an agent for RAG access
+   */
+  async attachArchive(agentId: string, archiveId: string): Promise<void> {
+    const response = await requestUrl({
+      url: `${this.baseUrl}/v1/agents/${agentId}/archives/attach/${archiveId}/`,
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+
+    if (response.status !== 200) {
+      throw new Error(`Failed to attach archive: ${response.text}`);
+    }
+  }
+
+  /**
+   * Delete all passages from an archive (for re-indexing)
+   */
+  async clearArchive(archiveId: string): Promise<void> {
+    // Get all passages first
+    const response = await requestUrl({
+      url: `${this.baseUrl}/v1/archives/${archiveId}/passages/`,
+      headers: this.getHeaders(),
+    });
+
+    if (response.status !== 200) {
+      return; // Archive might be empty
+    }
+
+    const passages = response.json as Array<{ id: string }>;
+
+    // Delete each passage
+    for (const passage of passages) {
+      try {
+        await requestUrl({
+          url: `${this.baseUrl}/v1/archives/${archiveId}/passages/${passage.id}/`,
+          method: 'DELETE',
+          headers: this.getHeaders(),
+        });
+      } catch {
+        // Continue even if one fails
+      }
+    }
+  }
 }
