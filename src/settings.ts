@@ -250,8 +250,8 @@ export class TherapistSettingTab extends PluginSettingTab {
     containerEl.createEl('h3', { text: 'Behavior' });
 
     new Setting(containerEl)
-      .setName('Response delay')
-      .setDesc('Seconds to wait after you stop typing before responding')
+      .setName('Observer delay')
+      .setDesc('Seconds to wait after you stop typing before the therapist reads your writing')
       .addSlider(slider => slider
         .setLimits(1, 10, 1)
         .setValue(this.plugin.settings.debounceMs / 1000)
