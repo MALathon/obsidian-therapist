@@ -1,8 +1,9 @@
-import { Plugin, MarkdownView, Editor, debounce, Notice, TFile } from 'obsidian';
+import { Plugin, MarkdownView, Editor, debounce, Notice, TFile, TFolder } from 'obsidian';
 import { moment } from 'obsidian';
 import { TherapistSettingTab, TherapistSettings, DEFAULT_SETTINGS } from './settings';
 import { LettaService } from './LettaService';
 import { getNewContent, isTherapistResponse, formatResponse, getJournalContent } from './contentParser';
+import { MemoryViewerModal } from './MemoryViewerModal';
 
 export default class TherapistPlugin extends Plugin {
   settings: TherapistSettings;
@@ -75,6 +76,39 @@ export default class TherapistPlugin extends Plugin {
         this.saveSettings();
         this.updateStatusBar();
         new Notice(`Therapist ${this.settings.enabled ? 'enabled' : 'disabled'}`);
+      }
+    });
+
+    // Add command to view memory
+    this.addCommand({
+      id: 'view-memory',
+      name: 'View therapist memory',
+      callback: () => {
+        this.openMemoryViewer();
+      }
+    });
+
+    // Add command to reindex vault
+    this.addCommand({
+      id: 'reindex-vault',
+      name: 'Reindex vault for therapist',
+      callback: async () => {
+        if (!this.settings.agentId) {
+          new Notice('No therapist agent configured');
+          return;
+        }
+        if (!this.settings.indexVault) {
+          new Notice('Vault indexing is not enabled');
+          return;
+        }
+        new Notice('Starting vault indexing...');
+        try {
+          await this.indexVault();
+          new Notice('Vault indexed successfully');
+        } catch (error) {
+          console.error('Indexing failed:', error);
+          new Notice(`Indexing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
       }
     });
 
@@ -429,5 +463,152 @@ export default class TherapistPlugin extends Plugin {
 
   async saveSettings() {
     await this.saveData(this.settings);
+  }
+
+  /**
+   * Open the memory viewer modal
+   */
+  openMemoryViewer() {
+    if (!this.settings.agentId) {
+      new Notice('No therapist agent configured');
+      return;
+    }
+    new MemoryViewerModal(this.app, this.lettaService, this.settings.agentId).open();
+  }
+
+  /**
+   * Index the vault content into Letta archives for RAG
+   */
+  async indexVault(): Promise<void> {
+    if (!this.settings.agentId) {
+      throw new Error('No agent configured');
+    }
+
+    // Create or get archive
+    let archiveId = this.settings.archiveId;
+    if (!archiveId) {
+      // Check if archive already exists
+      const archives = await this.lettaService.listArchives();
+      const existing = archives.find(a => a.name === 'obsidian-vault');
+      if (existing) {
+        archiveId = existing.id;
+      } else {
+        archiveId = await this.lettaService.createArchive('obsidian-vault');
+        // Attach to agent
+        await this.lettaService.attachArchive(this.settings.agentId, archiveId);
+      }
+      this.settings.archiveId = archiveId;
+      await this.saveSettings();
+    }
+
+    // Clear existing passages for fresh index
+    await this.lettaService.clearArchive(archiveId);
+
+    // Get all markdown files
+    const files = this.app.vault.getMarkdownFiles();
+    let indexed = 0;
+
+    for (const file of files) {
+      // Check if file should be indexed based on folder settings
+      if (!this.shouldIndexFile(file)) {
+        continue;
+      }
+
+      try {
+        const content = await this.app.vault.read(file);
+        if (content.trim().length < 50) {
+          // Skip very short files
+          continue;
+        }
+
+        // Split content into chunks (simple approach - by paragraphs)
+        const chunks = this.chunkContent(content, file.path);
+        for (const chunk of chunks) {
+          await this.lettaService.addPassage(archiveId, chunk.text, {
+            source: file.path,
+            title: file.basename,
+          });
+        }
+        indexed++;
+      } catch (error) {
+        console.warn(`Failed to index ${file.path}:`, error);
+      }
+    }
+
+    this.settings.lastIndexed = Date.now();
+    await this.saveSettings();
+
+    console.log(`Indexed ${indexed} files`);
+  }
+
+  /**
+   * Check if a file should be indexed based on folder settings
+   */
+  private shouldIndexFile(file: TFile): boolean {
+    const filePath = file.path;
+
+    // Check excluded folders first
+    for (const excluded of this.settings.excludedFolders) {
+      if (excluded === '' || excluded === '/') {
+        continue; // Don't exclude root
+      }
+      if (filePath.startsWith(excluded + '/') || filePath === excluded) {
+        return false;
+      }
+    }
+
+    // If included folders are specified, file must be in one of them
+    if (this.settings.includedFolders.length > 0) {
+      const hasRoot = this.settings.includedFolders.includes('') || this.settings.includedFolders.includes('/');
+      if (hasRoot) {
+        return true; // Root includes everything
+      }
+      for (const included of this.settings.includedFolders) {
+        if (filePath.startsWith(included + '/') || filePath === included) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Split content into chunks for indexing
+   */
+  private chunkContent(content: string, path: string): Array<{ text: string }> {
+    const chunks: Array<{ text: string }> = [];
+    const maxChunkSize = 1500; // Characters per chunk
+
+    // Split by paragraphs (double newline)
+    const paragraphs = content.split(/\n\n+/);
+    let currentChunk = `[${path}]\n\n`;
+
+    for (const paragraph of paragraphs) {
+      const trimmed = paragraph.trim();
+      if (!trimmed) continue;
+
+      // Skip very short paragraphs that are likely headings alone
+      if (trimmed.length < 20 && trimmed.startsWith('#')) {
+        currentChunk += trimmed + '\n\n';
+        continue;
+      }
+
+      if (currentChunk.length + trimmed.length > maxChunkSize && currentChunk.length > 100) {
+        // Save current chunk and start new one
+        chunks.push({ text: currentChunk.trim() });
+        currentChunk = `[${path}]\n\n`;
+      }
+
+      currentChunk += trimmed + '\n\n';
+    }
+
+    // Don't forget the last chunk
+    if (currentChunk.trim().length > 50) {
+      chunks.push({ text: currentChunk.trim() });
+    }
+
+    return chunks;
   }
 }

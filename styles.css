@@ -221,3 +221,172 @@
 .mod-clickable:hover {
   color: var(--text-accent);
 }
+
+/* Folder list styles */
+.therapist-folder-list {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.therapist-folder-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--background-secondary);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.therapist-folder-path {
+  color: var(--text-muted);
+  font-family: var(--font-monospace);
+}
+
+.therapist-folder-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 2px;
+}
+
+.therapist-folder-remove:hover {
+  color: var(--text-error);
+  background: var(--background-modifier-error);
+}
+
+/* Model badge */
+.therapist-model-badge {
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  padding: 2px 6px;
+  background: var(--background-secondary);
+  border-radius: 4px;
+}
+
+/* Memory viewer modal */
+.therapist-memory-modal {
+  max-width: 800px;
+  width: 90vw;
+}
+
+.therapist-memory-section {
+  margin-bottom: 24px;
+}
+
+.therapist-memory-section h3 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.therapist-memory-block {
+  background: var(--background-secondary);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.therapist-memory-block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.therapist-memory-block-label {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.therapist-memory-block-content {
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  color: var(--text-normal);
+}
+
+.therapist-memory-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  background: var(--background-secondary);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.therapist-memory-item-content {
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.therapist-memory-item-date {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.therapist-memory-item-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.therapist-memory-delete {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.therapist-memory-delete:hover {
+  color: var(--text-error);
+  background: var(--background-modifier-error);
+}
+
+.therapist-memory-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 16px;
+  text-align: center;
+}
+
+.therapist-memory-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding-bottom: 8px;
+}
+
+.therapist-memory-tab {
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.therapist-memory-tab:hover {
+  background: var(--background-modifier-hover);
+}
+
+.therapist-memory-tab.is-active {
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  font-weight: 500;
+}

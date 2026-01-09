@@ -1,4 +1,4 @@
-import { App, Notice, PluginSettingTab, Setting, requestUrl } from 'obsidian';
+import { App, Notice, PluginSettingTab, Setting, requestUrl, TFolder, FuzzySuggestModal } from 'obsidian';
 import type TherapistPlugin from './main';
 
 export interface TherapistSettings {
@@ -7,11 +7,17 @@ export interface TherapistSettings {
   openaiApiKey: string;
   anthropicApiKey: string;
   agentId: string;
-  agentName: string;  // Cached agent name from Letta
-  agentModel: string; // Cached agent model
-  therapistName: string; // Custom display name for the therapist
+  agentName: string;
+  agentModel: string;
+  therapistName: string;
   enabled: boolean;
   debounceMs: number;
+  // Vault indexing
+  indexVault: boolean;
+  includedFolders: string[];
+  excludedFolders: string[];
+  archiveId: string;
+  lastIndexed: number;
 }
 
 export const DEFAULT_SETTINGS: TherapistSettings = {
@@ -25,7 +31,48 @@ export const DEFAULT_SETTINGS: TherapistSettings = {
   therapistName: 'Therapist',
   enabled: true,
   debounceMs: 3000,
+  // Vault indexing defaults
+  indexVault: false,
+  includedFolders: [],
+  excludedFolders: [],
+  archiveId: '',
+  lastIndexed: 0,
 };
+
+// Folder suggester modal
+class FolderSuggestModal extends FuzzySuggestModal<TFolder> {
+  private onChoose: (folder: TFolder) => void;
+
+  constructor(app: App, onChoose: (folder: TFolder) => void) {
+    super(app);
+    this.onChoose = onChoose;
+  }
+
+  getItems(): TFolder[] {
+    const folders: TFolder[] = [];
+    const rootFolder = this.app.vault.getRoot();
+
+    const collectFolders = (folder: TFolder) => {
+      folders.push(folder);
+      for (const child of folder.children) {
+        if (child instanceof TFolder) {
+          collectFolders(child);
+        }
+      }
+    };
+
+    collectFolders(rootFolder);
+    return folders;
+  }
+
+  getItemText(folder: TFolder): string {
+    return folder.path || '/';
+  }
+
+  onChooseItem(folder: TFolder): void {
+    this.onChoose(folder);
+  }
+}
 
 export class TherapistSettingTab extends PluginSettingTab {
   plugin: TherapistPlugin;
@@ -203,6 +250,125 @@ export class TherapistSettingTab extends PluginSettingTab {
           this.plugin.settings.debounceMs = value * 1000;
           await this.plugin.saveSettings();
         }));
+
+    // ═══════════════════════════════════════════════════════════════
+    // VAULT INDEXING (only show when agent exists)
+    // ═══════════════════════════════════════════════════════════════
+    if (hasAgent) {
+      containerEl.createEl('h3', { text: 'Vault Memory' });
+      containerEl.createEl('p', {
+        text: 'Index your vault so your therapist can reference your notes during sessions.',
+        cls: 'setting-item-description',
+      });
+
+      new Setting(containerEl)
+        .setName('Enable vault indexing')
+        .setDesc('Automatically index notes for the therapist to reference')
+        .addToggle(toggle => toggle
+          .setValue(this.plugin.settings.indexVault)
+          .onChange(async (value) => {
+            this.plugin.settings.indexVault = value;
+            await this.plugin.saveSettings();
+            this.display();
+          }));
+
+      if (this.plugin.settings.indexVault) {
+        // Included folders
+        const includedSetting = new Setting(containerEl)
+          .setName('Included folders')
+          .setDesc('Only index notes in these folders. Leave empty to include all.')
+          .addButton(button => button
+            .setButtonText('Add folder')
+            .onClick(() => {
+              new FolderSuggestModal(this.app, async (folder) => {
+                const path = folder.path || '/';
+                if (!this.plugin.settings.includedFolders.includes(path)) {
+                  this.plugin.settings.includedFolders.push(path);
+                  await this.plugin.saveSettings();
+                  this.display();
+                }
+              }).open();
+            }));
+
+        // Show included folders list
+        if (this.plugin.settings.includedFolders.length > 0) {
+          const listEl = includedSetting.settingEl.createDiv({ cls: 'therapist-folder-list' });
+          for (const folder of this.plugin.settings.includedFolders) {
+            const itemEl = listEl.createDiv({ cls: 'therapist-folder-item' });
+            itemEl.createSpan({ text: folder || '/', cls: 'therapist-folder-path' });
+            const removeBtn = itemEl.createEl('button', { text: '×', cls: 'therapist-folder-remove' });
+            removeBtn.addEventListener('click', async () => {
+              this.plugin.settings.includedFolders = this.plugin.settings.includedFolders.filter(f => f !== folder);
+              await this.plugin.saveSettings();
+              this.display();
+            });
+          }
+        }
+
+        // Excluded folders
+        const excludedSetting = new Setting(containerEl)
+          .setName('Excluded folders')
+          .setDesc('Never index notes in these folders')
+          .addButton(button => button
+            .setButtonText('Add folder')
+            .onClick(() => {
+              new FolderSuggestModal(this.app, async (folder) => {
+                const path = folder.path || '/';
+                if (!this.plugin.settings.excludedFolders.includes(path)) {
+                  this.plugin.settings.excludedFolders.push(path);
+                  await this.plugin.saveSettings();
+                  this.display();
+                }
+              }).open();
+            }));
+
+        // Show excluded folders list
+        if (this.plugin.settings.excludedFolders.length > 0) {
+          const listEl = excludedSetting.settingEl.createDiv({ cls: 'therapist-folder-list' });
+          for (const folder of this.plugin.settings.excludedFolders) {
+            const itemEl = listEl.createDiv({ cls: 'therapist-folder-item' });
+            itemEl.createSpan({ text: folder || '/', cls: 'therapist-folder-path' });
+            const removeBtn = itemEl.createEl('button', { text: '×', cls: 'therapist-folder-remove' });
+            removeBtn.addEventListener('click', async () => {
+              this.plugin.settings.excludedFolders = this.plugin.settings.excludedFolders.filter(f => f !== folder);
+              await this.plugin.saveSettings();
+              this.display();
+            });
+          }
+        }
+
+        // Index status and actions
+        const lastIndexed = this.plugin.settings.lastIndexed;
+        const statusText = lastIndexed > 0
+          ? `Last indexed: ${new Date(lastIndexed).toLocaleString()}`
+          : 'Not yet indexed';
+
+        new Setting(containerEl)
+          .setName('Index status')
+          .setDesc(statusText)
+          .addButton(button => button
+            .setButtonText('Reindex Now')
+            .onClick(async () => {
+              button.setButtonText('Indexing...');
+              button.setDisabled(true);
+              try {
+                await this.plugin.indexVault();
+                new Notice('Vault indexed successfully');
+                this.display();
+              } catch (error) {
+                console.error('Indexing failed:', error);
+                new Notice(`Indexing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                button.setButtonText('Reindex Now');
+                button.setDisabled(false);
+              }
+            }))
+          .addButton(button => button
+            .setButtonText('View Memory')
+            .onClick(() => {
+              this.plugin.openMemoryViewer();
+            }));
+      }
+    }
 
     // ═══════════════════════════════════════════════════════════════
     // SERVER CONNECTION

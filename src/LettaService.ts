@@ -427,4 +427,96 @@ export class LettaService {
       }
     }
   }
+
+  /**
+   * Get agent memory blocks (persona, human)
+   */
+  async getMemoryBlocks(agentId: string): Promise<Array<{ id: string; label: string; value: string }>> {
+    const response = await requestUrl({
+      url: `${this.baseUrl}/v1/agents/${agentId}/memory/blocks/`,
+      headers: this.getHeaders(),
+    });
+
+    if (response.status !== 200) {
+      throw new Error('Failed to get memory blocks');
+    }
+
+    return response.json.map((b: { id: string; label: string; value: string }) => ({
+      id: b.id,
+      label: b.label,
+      value: b.value,
+    }));
+  }
+
+  /**
+   * Update a memory block's value
+   */
+  async updateMemoryBlock(agentId: string, blockId: string, value: string): Promise<void> {
+    const response = await requestUrl({
+      url: `${this.baseUrl}/v1/agents/${agentId}/memory/blocks/${blockId}/`,
+      method: 'PATCH',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ value }),
+    });
+
+    if (response.status !== 200) {
+      throw new Error('Failed to update memory block');
+    }
+  }
+
+  /**
+   * Get archival memories (long-term memories stored by the agent)
+   */
+  async getArchivalMemory(agentId: string, limit: number = 100): Promise<Array<{ id: string; text: string; created_at: string }>> {
+    const response = await requestUrl({
+      url: `${this.baseUrl}/v1/agents/${agentId}/archival/?limit=${limit}`,
+      headers: this.getHeaders(),
+    });
+
+    if (response.status !== 200) {
+      throw new Error('Failed to get archival memory');
+    }
+
+    return response.json.map((m: { id: string; text: string; created_at: string }) => ({
+      id: m.id,
+      text: m.text,
+      created_at: m.created_at,
+    }));
+  }
+
+  /**
+   * Delete an archival memory entry
+   */
+  async deleteArchivalMemory(agentId: string, memoryId: string): Promise<void> {
+    const response = await requestUrl({
+      url: `${this.baseUrl}/v1/agents/${agentId}/archival/${memoryId}/`,
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+
+    if (response.status !== 200 && response.status !== 204) {
+      throw new Error('Failed to delete archival memory');
+    }
+  }
+
+  /**
+   * Get recall memories (recent conversation context)
+   */
+  async getRecallMemory(agentId: string, limit: number = 50): Promise<Array<{ id: string; text: string; created_at: string }>> {
+    const response = await requestUrl({
+      url: `${this.baseUrl}/v1/agents/${agentId}/recall/?limit=${limit}`,
+      headers: this.getHeaders(),
+    });
+
+    if (response.status !== 200) {
+      // Recall memory might not be available for all agents
+      return [];
+    }
+
+    return response.json.map((m: { id: string; text: string; created_at: string }) => ({
+      id: m.id,
+      text: m.text,
+      created_at: m.created_at,
+    }));
+  }
 }
