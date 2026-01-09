@@ -1,5 +1,4 @@
-import { Plugin, MarkdownView, Editor, debounce, Notice, TFile, TFolder } from 'obsidian';
-import { moment } from 'obsidian';
+import { Plugin, MarkdownView, Editor, debounce, Notice, TFile } from 'obsidian';
 import { TherapistSettingTab, TherapistSettings, DEFAULT_SETTINGS } from './settings';
 import { LettaService } from './LettaService';
 import { getNewContent, isTherapistResponse, formatResponse, getJournalContent } from './contentParser';
@@ -10,7 +9,7 @@ export default class TherapistPlugin extends Plugin {
   lettaService: LettaService;
   private isProcessing: boolean = false;
   private statusBarEl: HTMLElement | null = null;
-  private pendingInsight: string | null = null;
+  private pendingInsights: string[] = [];
   private indicatorEl: HTMLElement | null = null;
   private popoverEl: HTMLElement | null = null;
   private popoverVisible: boolean = false;
@@ -48,15 +47,15 @@ export default class TherapistPlugin extends Plugin {
       }
     });
 
-    // Add command to copy insight to daily note
+    // Add command to insert insight at cursor
     this.addCommand({
-      id: 'copy-insight',
-      name: 'Copy insight to daily note',
-      callback: () => {
-        if (this.pendingInsight) {
-          this.copyToDailyNote();
+      id: 'insert-insight',
+      name: 'Insert insight at cursor',
+      editorCallback: (editor: Editor) => {
+        if (this.pendingInsights.length > 0) {
+          this.insertInsightAtCursor(editor);
         } else {
-          new Notice('No insight available');
+          new Notice('No insights available');
         }
       }
     });
@@ -68,7 +67,7 @@ export default class TherapistPlugin extends Plugin {
       callback: () => {
         this.settings.enabled = !this.settings.enabled;
         if (!this.settings.enabled) {
-          this.pendingInsight = null;
+          this.pendingInsights = [];
           this.hideIndicator();
         } else {
           this.checkCurrentNote();
@@ -143,7 +142,6 @@ export default class TherapistPlugin extends Plugin {
   }
 
   private checkCurrentNote() {
-    this.pendingInsight = null;
     this.hidePopover();
 
     if (!this.settings.enabled || !this.settings.agentId) {
@@ -159,9 +157,22 @@ export default class TherapistPlugin extends Plugin {
       return;
     }
 
-    // Show orb in observing state
-    this.showIndicator('observing');
-    this.updateStatusBar('listening');
+    // Check if current file is in allowed folders
+    const file = view.file;
+    if (file && !this.shouldObserveFile(file)) {
+      this.hideIndicator();
+      this.updateStatusBar('off');
+      return;
+    }
+
+    // Show orb - with insight state if we have queued insights
+    if (this.pendingInsights.length > 0) {
+      this.showIndicator('insight');
+      this.updateStatusBar('insight');
+    } else {
+      this.showIndicator('observing');
+      this.updateStatusBar('listening');
+    }
   }
 
   updateStatusBar(state?: 'listening' | 'thinking' | 'insight' | 'off') {
@@ -197,8 +208,9 @@ export default class TherapistPlugin extends Plugin {
     if (this.isProcessing) return;
     if (!this.settings.agentId) return;
 
-    // Don't observe if we already have a pending insight
-    if (this.pendingInsight) return;
+    // Check if file is in allowed folders
+    const file = view.file;
+    if (file && !this.shouldObserveFile(file)) return;
 
     const fullContent = editor.getValue();
     const newContent = getNewContent(fullContent);
@@ -219,17 +231,29 @@ export default class TherapistPlugin extends Plugin {
 
       const trimmed = response?.trim() || '';
       if (trimmed && trimmed !== '[listening]') {
-        this.pendingInsight = response;
+        // Add to queue instead of replacing
+        this.pendingInsights.push(response);
+        this.showIndicator('insight');
+        this.updateStatusBar('insight');
+      } else {
+        // Keep insight state if we have queued insights
+        if (this.pendingInsights.length > 0) {
+          this.showIndicator('insight');
+          this.updateStatusBar('insight');
+        } else {
+          this.showIndicator('observing');
+          this.updateStatusBar('listening');
+        }
+      }
+    } catch (error) {
+      console.error('Error observing:', error);
+      if (this.pendingInsights.length > 0) {
         this.showIndicator('insight');
         this.updateStatusBar('insight');
       } else {
         this.showIndicator('observing');
         this.updateStatusBar('listening');
       }
-    } catch (error) {
-      console.error('Error observing:', error);
-      this.showIndicator('observing');
-      this.updateStatusBar('listening');
     } finally {
       this.isProcessing = false;
     }
@@ -341,48 +365,50 @@ export default class TherapistPlugin extends Plugin {
   }
 
   private showPopover() {
-    if (!this.pendingInsight || !this.indicatorEl) return;
+    if (this.pendingInsights.length === 0 || !this.indicatorEl) return;
 
     if (!this.popoverEl) {
       this.popoverEl = document.createElement('div');
       this.popoverEl.className = 'therapist-popover';
-
-      this.popoverEl.innerHTML = `
-        <div class="therapist-popover-header">
-          <span class="therapist-popover-title">Therapist Insight</span>
-          <button class="therapist-popover-dismiss">×</button>
-        </div>
-        <div class="therapist-popover-content"></div>
-        <div class="therapist-popover-actions">
-          <button class="therapist-popover-btn secondary dismiss-btn">Dismiss</button>
-          <button class="therapist-popover-btn primary copy-btn">Copy to Daily Note</button>
-        </div>
-      `;
-
-      // Event listeners
-      this.popoverEl.querySelector('.therapist-popover-dismiss')?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.hidePopover();
-      });
-
-      this.popoverEl.querySelector('.dismiss-btn')?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.dismissInsight();
-      });
-
-      this.popoverEl.querySelector('.copy-btn')?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.copyToDailyNote();
-      });
-
       this.indicatorEl.appendChild(this.popoverEl);
     }
 
-    // Update content
-    const contentEl = this.popoverEl.querySelector('.therapist-popover-content');
-    if (contentEl) {
-      contentEl.textContent = this.pendingInsight;
-    }
+    // Build content with all insights
+    const insightCount = this.pendingInsights.length;
+    const insightsHtml = this.pendingInsights
+      .map((insight, i) => `<div class="therapist-insight-item">${insight}</div>`)
+      .join('<hr class="therapist-insight-divider">');
+
+    this.popoverEl.innerHTML = `
+      <div class="therapist-popover-header">
+        <span class="therapist-popover-title">${insightCount} Insight${insightCount > 1 ? 's' : ''}</span>
+        <button class="therapist-popover-dismiss">×</button>
+      </div>
+      <div class="therapist-popover-content">${insightsHtml}</div>
+      <div class="therapist-popover-actions">
+        <button class="therapist-popover-btn secondary dismiss-btn">Dismiss All</button>
+        <button class="therapist-popover-btn primary insert-btn">Insert at Cursor</button>
+      </div>
+    `;
+
+    // Event listeners
+    this.popoverEl.querySelector('.therapist-popover-dismiss')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.hidePopover();
+    });
+
+    this.popoverEl.querySelector('.dismiss-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.dismissInsights();
+    });
+
+    this.popoverEl.querySelector('.insert-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+      if (view) {
+        this.insertInsightAtCursor(view.editor);
+      }
+    });
 
     this.popoverEl.classList.add('is-visible');
     this.popoverVisible = true;
@@ -395,61 +421,26 @@ export default class TherapistPlugin extends Plugin {
     this.popoverVisible = false;
   }
 
-  private dismissInsight() {
-    this.pendingInsight = null;
+  private dismissInsights() {
+    this.pendingInsights = [];
     this.hidePopover();
     this.showIndicator('observing');
     this.updateStatusBar('listening');
   }
 
-  private async copyToDailyNote() {
-    if (!this.pendingInsight) return;
+  private insertInsightAtCursor(editor: Editor) {
+    if (this.pendingInsights.length === 0) return;
 
-    try {
-      // Get today's daily note path
-      const today = moment().format('YYYY-MM-DD');
-      const dailyNotePath = `${today}.md`;
+    // Format all insights as blockquotes
+    const formattedInsights = this.pendingInsights
+      .map(insight => formatResponse(insight, this.settings.therapistName))
+      .join('\n');
 
-      let file = this.app.vault.getAbstractFileByPath(dailyNotePath);
+    // Insert at cursor position
+    editor.replaceSelection(formattedInsights);
 
-      if (!file) {
-        // Create daily note if it doesn't exist
-        file = await this.app.vault.create(dailyNotePath, `# ${today}\n\n## Journal\n\n### Therapist Insight\n\n${this.pendingInsight}\n`);
-        new Notice('Created daily note with insight');
-      } else if (file instanceof TFile) {
-        // Append to existing daily note
-        let content = await this.app.vault.read(file);
-
-        // Check if ## Journal section exists
-        if (!content.includes('## Journal')) {
-          content += '\n\n## Journal\n';
-        }
-
-        // Find ## Journal section and add insight after it
-        const journalIndex = content.indexOf('## Journal');
-        const afterJournal = content.substring(journalIndex);
-        const nextSectionMatch = afterJournal.substring(11).match(/\n## /);
-
-        const insightBlock = `\n### Therapist Insight\n\n${this.pendingInsight}\n`;
-
-        if (nextSectionMatch) {
-          // Insert before next section
-          const insertPos = journalIndex + 11 + nextSectionMatch.index!;
-          content = content.substring(0, insertPos) + insightBlock + content.substring(insertPos);
-        } else {
-          // Append at end
-          content += insightBlock;
-        }
-
-        await this.app.vault.modify(file, content);
-        new Notice('Insight copied to daily note');
-      }
-
-      this.dismissInsight();
-    } catch (error) {
-      console.error('Error copying to daily note:', error);
-      new Notice('Failed to copy to daily note');
-    }
+    new Notice(`Inserted ${this.pendingInsights.length} insight${this.pendingInsights.length > 1 ? 's' : ''}`);
+    this.dismissInsights();
   }
 
   onunload() {
@@ -539,6 +530,17 @@ export default class TherapistPlugin extends Plugin {
     await this.saveSettings();
 
     console.log(`Indexed ${indexed} files`);
+  }
+
+  /**
+   * Check if a file should be observed (same logic as indexing)
+   */
+  private shouldObserveFile(file: TFile): boolean {
+    // If no folders configured, observe everything
+    if (this.settings.includedFolders.length === 0 && this.settings.excludedFolders.length === 0) {
+      return true;
+    }
+    return this.shouldIndexFile(file);
   }
 
   /**

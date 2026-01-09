@@ -172,8 +172,18 @@
   font-size: 14px;
   line-height: 1.6;
   color: var(--text-normal);
-  max-height: 200px;
+  max-height: 300px;
   overflow-y: auto;
+}
+
+.therapist-insight-item {
+  margin: 0;
+}
+
+.therapist-insight-divider {
+  margin: 12px 0;
+  border: none;
+  border-top: 1px solid var(--background-modifier-border);
 }
 
 .therapist-popover-actions {
