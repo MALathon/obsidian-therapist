@@ -136,6 +136,16 @@ export class TherapistSettingTab extends PluginSettingTab {
             this.plugin.updateStatusBar();
           }));
 
+      // View Memory button - always visible when agent exists
+      new Setting(containerEl)
+        .setName('Memory')
+        .setDesc('View what your therapist remembers about you')
+        .addButton(button => button
+          .setButtonText('View Memory')
+          .onClick(() => {
+            this.plugin.openMemoryViewer();
+          }));
+
       // Agent ID (collapsible/subtle)
       const idSetting = new Setting(containerEl)
         .setName('Agent ID')
