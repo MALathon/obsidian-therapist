@@ -134,7 +134,13 @@ export class MemoryViewerModal extends Modal {
 
   private renderArchivalMemory(container: HTMLElement) {
     const section = container.createDiv({ cls: 'therapist-memory-section' });
-    section.createEl('h3', { text: 'Archival Memories' });
+
+    const headerEl = section.createDiv({ cls: 'therapist-memory-header' });
+    headerEl.createEl('h3', { text: 'Archival Memories' });
+
+    const addBtn = headerEl.createEl('button', { text: '+ Add Memory', cls: 'therapist-memory-add' });
+    addBtn.addEventListener('click', () => this.addArchivalMemory());
+
     section.createEl('p', {
       text: 'Long-term memories your therapist has stored. These are facts and observations the agent has explicitly chosen to remember.',
       cls: 'setting-item-description'
@@ -182,10 +188,10 @@ export class MemoryViewerModal extends Modal {
   }
 
   private async editMemoryBlock(block: MemoryBlock) {
-    // Create a simple edit modal
+    // Create a simple edit modal - use label for API call
     const editModal = new EditMemoryModal(this.app, block.value, async (newValue) => {
       try {
-        await this.lettaService.updateMemoryBlock(this.agentId, block.id, newValue);
+        await this.lettaService.updateMemoryBlock(this.agentId, block.label, newValue);
         block.value = newValue;
         this.renderContent();
         new Notice('Memory updated');
@@ -194,6 +200,22 @@ export class MemoryViewerModal extends Modal {
         new Notice('Failed to update memory');
       }
     });
+    editModal.open();
+  }
+
+  private async addArchivalMemory() {
+    const editModal = new EditMemoryModal(this.app, '', async (text) => {
+      if (!text.trim()) return;
+      try {
+        await this.lettaService.addArchivalMemory(this.agentId, text);
+        await this.loadData();
+        this.renderContent();
+        new Notice('Memory added');
+      } catch (error) {
+        console.error('Failed to add memory:', error);
+        new Notice('Failed to add memory');
+      }
+    }, 'Add Memory');
     editModal.open();
   }
 
@@ -206,16 +228,18 @@ export class MemoryViewerModal extends Modal {
 class EditMemoryModal extends Modal {
   private value: string;
   private onSave: (value: string) => Promise<void>;
+  private title: string;
 
-  constructor(app: App, value: string, onSave: (value: string) => Promise<void>) {
+  constructor(app: App, value: string, onSave: (value: string) => Promise<void>, title: string = 'Edit Memory') {
     super(app);
     this.value = value;
     this.onSave = onSave;
+    this.title = title;
   }
 
   onOpen() {
     const { contentEl } = this;
-    contentEl.createEl('h2', { text: 'Edit Memory' });
+    contentEl.createEl('h2', { text: this.title });
 
     const textarea = contentEl.createEl('textarea', {
       cls: 'therapist-memory-edit-textarea',

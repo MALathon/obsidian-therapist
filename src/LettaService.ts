@@ -433,7 +433,7 @@ export class LettaService {
    */
   async getMemoryBlocks(agentId: string): Promise<Array<{ id: string; label: string; value: string }>> {
     const response = await requestUrl({
-      url: `${this.baseUrl}/v1/agents/${agentId}/memory/blocks/`,
+      url: `${this.baseUrl}/v1/agents/${agentId}/core-memory/blocks`,
       headers: this.getHeaders(),
     });
 
@@ -449,11 +449,11 @@ export class LettaService {
   }
 
   /**
-   * Update a memory block's value
+   * Update a memory block's value by label
    */
-  async updateMemoryBlock(agentId: string, blockId: string, value: string): Promise<void> {
+  async updateMemoryBlock(agentId: string, blockLabel: string, value: string): Promise<void> {
     const response = await requestUrl({
-      url: `${this.baseUrl}/v1/agents/${agentId}/memory/blocks/${blockId}/`,
+      url: `${this.baseUrl}/v1/agents/${agentId}/core-memory/blocks/${blockLabel}`,
       method: 'PATCH',
       headers: this.getHeaders(),
       body: JSON.stringify({ value }),
@@ -469,7 +469,7 @@ export class LettaService {
    */
   async getArchivalMemory(agentId: string, limit: number = 100): Promise<Array<{ id: string; text: string; created_at: string }>> {
     const response = await requestUrl({
-      url: `${this.baseUrl}/v1/agents/${agentId}/archival/?limit=${limit}`,
+      url: `${this.baseUrl}/v1/agents/${agentId}/archival-memory?limit=${limit}`,
       headers: this.getHeaders(),
     });
 
@@ -489,7 +489,7 @@ export class LettaService {
    */
   async deleteArchivalMemory(agentId: string, memoryId: string): Promise<void> {
     const response = await requestUrl({
-      url: `${this.baseUrl}/v1/agents/${agentId}/archival/${memoryId}/`,
+      url: `${this.baseUrl}/v1/agents/${agentId}/archival-memory/${memoryId}`,
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -500,23 +500,18 @@ export class LettaService {
   }
 
   /**
-   * Get recall memories (recent conversation context)
+   * Add an archival memory entry
    */
-  async getRecallMemory(agentId: string, limit: number = 50): Promise<Array<{ id: string; text: string; created_at: string }>> {
+  async addArchivalMemory(agentId: string, text: string): Promise<void> {
     const response = await requestUrl({
-      url: `${this.baseUrl}/v1/agents/${agentId}/recall/?limit=${limit}`,
+      url: `${this.baseUrl}/v1/agents/${agentId}/archival-memory`,
+      method: 'POST',
       headers: this.getHeaders(),
+      body: JSON.stringify({ text }),
     });
 
     if (response.status !== 200) {
-      // Recall memory might not be available for all agents
-      return [];
+      throw new Error('Failed to add archival memory');
     }
-
-    return response.json.map((m: { id: string; text: string; created_at: string }) => ({
-      id: m.id,
-      text: m.text,
-      created_at: m.created_at,
-    }));
   }
 }
