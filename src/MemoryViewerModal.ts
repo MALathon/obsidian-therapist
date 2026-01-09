@@ -121,14 +121,11 @@ export class MemoryViewerModal extends Modal {
       const headerEl = blockEl.createDiv({ cls: 'therapist-memory-block-header' });
       headerEl.createSpan({ text: block.label, cls: 'therapist-memory-block-label' });
 
+      const editBtn = headerEl.createEl('button', { text: 'Edit', cls: 'therapist-memory-btn' });
+      editBtn.addEventListener('click', () => this.editMemoryBlock(block));
+
       const contentEl = blockEl.createDiv({ cls: 'therapist-memory-block-content' });
       contentEl.setText(block.value);
-
-      // Only allow editing 'human' block (not persona)
-      if (block.label === 'human') {
-        const editBtn = headerEl.createEl('button', { text: 'Edit', cls: 'therapist-memory-delete' });
-        editBtn.addEventListener('click', () => this.editMemoryBlock(block));
-      }
     }
   }
 
