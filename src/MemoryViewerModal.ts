@@ -104,7 +104,13 @@ export class MemoryViewerModal extends Modal {
 
   private renderMemoryBlocks(container: HTMLElement) {
     const section = container.createDiv({ cls: 'therapist-memory-section' });
-    section.createEl('h3', { text: 'Core Memory Blocks' });
+
+    const headerEl = section.createDiv({ cls: 'therapist-memory-header' });
+    headerEl.createEl('h3', { text: 'Core Memory Blocks' });
+
+    const addBtn = headerEl.createEl('button', { text: '+ Add Block', cls: 'therapist-memory-add' });
+    addBtn.addEventListener('click', () => this.addMemoryBlock());
+
     section.createEl('p', {
       text: 'These are the core memories your therapist maintains about you and their persona.',
       cls: 'setting-item-description'
@@ -118,11 +124,20 @@ export class MemoryViewerModal extends Modal {
     for (const block of this.memoryBlocks) {
       const blockEl = section.createDiv({ cls: 'therapist-memory-block' });
 
-      const headerEl = blockEl.createDiv({ cls: 'therapist-memory-block-header' });
-      headerEl.createSpan({ text: block.label, cls: 'therapist-memory-block-label' });
+      const blockHeaderEl = blockEl.createDiv({ cls: 'therapist-memory-block-header' });
+      blockHeaderEl.createSpan({ text: block.label, cls: 'therapist-memory-block-label' });
 
-      const editBtn = headerEl.createEl('button', { text: 'Edit', cls: 'therapist-memory-btn' });
+      const actionsEl = blockHeaderEl.createDiv({ cls: 'therapist-memory-item-actions' });
+
+      const editBtn = actionsEl.createEl('button', { text: 'Edit', cls: 'therapist-memory-btn' });
       editBtn.addEventListener('click', () => this.editMemoryBlock(block));
+
+      // Show delete for non-essential blocks (not persona/human)
+      const isEssential = block.label === 'persona' || block.label === 'human';
+      if (!isEssential) {
+        const deleteBtn = actionsEl.createEl('button', { text: 'Delete', cls: 'therapist-memory-delete' });
+        deleteBtn.addEventListener('click', () => this.deleteMemoryBlock(block));
+      }
 
       const contentEl = blockEl.createDiv({ cls: 'therapist-memory-block-content' });
       contentEl.setText(block.value);
@@ -202,6 +217,41 @@ export class MemoryViewerModal extends Modal {
       }
     });
     editModal.open();
+  }
+
+  private async addMemoryBlock() {
+    // First ask for label, then value
+    const labelModal = new EditMemoryModal(this.app, '', async (label) => {
+      if (!label.trim()) return;
+      // Now ask for value
+      const valueModal = new EditMemoryModal(this.app, '', async (value) => {
+        try {
+          await this.lettaService.createMemoryBlock(this.agentId, label.trim(), value);
+          await this.loadData();
+          this.renderContent();
+          new Notice('Memory block created');
+        } catch (error) {
+          console.error('Failed to create memory block:', error);
+          new Notice('Failed to create memory block');
+        }
+      }, 'Block Content');
+      valueModal.open();
+    }, 'Block Label (e.g., "goals", "preferences")');
+    labelModal.open();
+  }
+
+  private async deleteMemoryBlock(block: MemoryBlock) {
+    if (confirm(`Delete "${block.label}" block? This cannot be undone.`)) {
+      try {
+        await this.lettaService.deleteMemoryBlock(this.agentId, block.id);
+        this.memoryBlocks = this.memoryBlocks.filter(b => b.id !== block.id);
+        this.renderContent();
+        new Notice('Memory block deleted');
+      } catch (error) {
+        console.error('Failed to delete memory block:', error);
+        new Notice('Failed to delete memory block');
+      }
+    }
   }
 
   private async addArchivalMemory() {

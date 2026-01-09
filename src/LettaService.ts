@@ -465,6 +465,53 @@ export class LettaService {
   }
 
   /**
+   * Create a new memory block and attach it to the agent
+   */
+  async createMemoryBlock(agentId: string, label: string, value: string): Promise<string> {
+    // First create the block
+    const createResponse = await requestUrl({
+      url: `${this.baseUrl}/v1/blocks/`,
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ label, value }),
+    });
+
+    if (createResponse.status !== 200) {
+      throw new Error('Failed to create memory block');
+    }
+
+    const blockId = createResponse.json.id;
+
+    // Then attach it to the agent
+    const attachResponse = await requestUrl({
+      url: `${this.baseUrl}/v1/agents/${agentId}/core-memory/blocks/attach/${blockId}`,
+      method: 'PATCH',
+      headers: this.getHeaders(),
+    });
+
+    if (attachResponse.status !== 200) {
+      throw new Error('Failed to attach memory block to agent');
+    }
+
+    return blockId;
+  }
+
+  /**
+   * Delete a memory block from the agent (detach it)
+   */
+  async deleteMemoryBlock(agentId: string, blockId: string): Promise<void> {
+    const response = await requestUrl({
+      url: `${this.baseUrl}/v1/agents/${agentId}/core-memory/blocks/detach/${blockId}`,
+      method: 'PATCH',
+      headers: this.getHeaders(),
+    });
+
+    if (response.status !== 200) {
+      throw new Error('Failed to delete memory block');
+    }
+  }
+
+  /**
    * Get archival memories (long-term memories stored by the agent)
    */
   async getArchivalMemory(agentId: string, limit: number = 100): Promise<Array<{ id: string; text: string; created_at: string }>> {
