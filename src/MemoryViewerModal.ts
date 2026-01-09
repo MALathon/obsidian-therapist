@@ -172,6 +172,10 @@ export class MemoryViewerModal extends Modal {
       });
 
       const actionsEl = itemEl.createDiv({ cls: 'therapist-memory-item-actions' });
+
+      const editBtn = actionsEl.createEl('button', { text: 'Edit', cls: 'therapist-memory-btn' });
+      editBtn.addEventListener('click', () => this.editArchivalMemory(memory));
+
       const deleteBtn = actionsEl.createEl('button', { text: 'Delete', cls: 'therapist-memory-delete' });
       deleteBtn.addEventListener('click', async () => {
         try {
@@ -216,6 +220,26 @@ export class MemoryViewerModal extends Modal {
         new Notice('Failed to add memory');
       }
     }, 'Add Memory');
+    editModal.open();
+  }
+
+  private async editArchivalMemory(memory: ArchivalMemory) {
+    // Letta doesn't support PATCH for archival memory, so we delete + re-add
+    const editModal = new EditMemoryModal(this.app, memory.text, async (newText) => {
+      if (!newText.trim()) return;
+      if (newText === memory.text) return; // No change
+      try {
+        // Delete old, add new (archival memories are immutable in Letta)
+        await this.lettaService.deleteArchivalMemory(this.agentId, memory.id);
+        await this.lettaService.addArchivalMemory(this.agentId, newText);
+        await this.loadData();
+        this.renderContent();
+        new Notice('Memory updated');
+      } catch (error) {
+        console.error('Failed to update memory:', error);
+        new Notice('Failed to update memory');
+      }
+    }, 'Edit Memory');
     editModal.open();
   }
 

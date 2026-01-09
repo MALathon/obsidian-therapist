@@ -377,6 +377,21 @@
   gap: 4px;
 }
 
+.therapist-memory-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.therapist-memory-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
 .therapist-memory-delete {
   background: none;
   border: none;
